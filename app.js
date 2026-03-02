@@ -25,10 +25,17 @@ var currentYear = 2026;
 var fields = [colMonth, colAmount, colPLCategory, colSource];
 var query = "/data/v1/" + datasets[0] + "?fields=" + fields.join();
 
+var loader = document.getElementById("loader");
+var loaderText = document.getElementById("loader-text");
+
+loaderText.textContent = "Fetching from Job Financials...";
+
 domo.get(query, { format: "array-of-arrays" })
   .then(function (data) {
+    loaderText.textContent = "Building chart...";
     var processed = aggregateData(data);
     buildChart(processed);
+    loader.classList.add("hidden");
   });
 
 function aggregateData(data) {
