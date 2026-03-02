@@ -5,11 +5,8 @@
 
 var datasets = ["dataset"];
 
-// Column names as returned by DOMO (uses actual dataset column names, not manifest aliases)
-var colMonth = "MONTH";
-var colAmount = "Amount";
-var colPLCategory = "P&L Category Name";
-var colSource = "SOURCE";
+// Manifest aliases used in the query URL
+var queryAliases = ["MONTH", "Amount", "PLCategoryName", "SOURCE"];
 
 // P&L Category Name values that constitute "Direct Labor"
 var laborCategories = ["Total Labor"];
@@ -22,8 +19,16 @@ var sourceFilter = "ACTUAL";
 var currentYear = 2026;
 
 // Data query for live DOMO data
-var fields = [colMonth, colAmount, colPLCategory, colSource];
-var query = "/data/v1/" + datasets[0] + "?fields=" + fields.join();
+var query = "/data/v1/" + datasets[0] + "?fields=" + queryAliases.join();
+
+// Find a column index by trying multiple possible names
+function findCol(columns, names) {
+  for (var i = 0; i < names.length; i++) {
+    var idx = columns.indexOf(names[i]);
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
 
 var loader = document.getElementById("loader");
 var loaderText = document.getElementById("loader-text");
@@ -39,10 +44,11 @@ domo.get(query, { format: "array-of-arrays" })
   });
 
 function aggregateData(data) {
-  var monthIdx = data.columns.indexOf(colMonth);
-  var amountIdx = data.columns.indexOf(colAmount);
-  var categoryIdx = data.columns.indexOf(colPLCategory);
-  var sourceIdx = data.columns.indexOf(colSource);
+  // Try both manifest aliases and actual dataset column names
+  var monthIdx = findCol(data.columns, ["MONTH", "Month", "month"]);
+  var amountIdx = findCol(data.columns, ["Amount", "amount", "AMOUNT"]);
+  var categoryIdx = findCol(data.columns, ["PLCategoryName", "P&L Category Name", "P&L_Category_Name"]);
+  var sourceIdx = findCol(data.columns, ["SOURCE", "Source", "source"]);
 
   // DEBUG: collect unique values to diagnose mismatches
   var uniqueCategories = {};
