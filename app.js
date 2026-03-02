@@ -44,6 +44,11 @@ function aggregateData(data) {
   var categoryIdx = data.columns.indexOf(colPLCategory);
   var sourceIdx = data.columns.indexOf(colSource);
 
+  // DEBUG: collect unique values to diagnose mismatches
+  var uniqueCategories = {};
+  var uniqueSources = {};
+  var totalRows = data.rows.length;
+
   // Buckets: { "2026-01": { labor: 0, revenue: 0 } }
   var buckets = {};
 
@@ -52,6 +57,10 @@ function aggregateData(data) {
     var amount = parseFloat(row[amountIdx]) || 0;
     var category = row[categoryIdx];
     var source = row[sourceIdx];
+
+    // Track unique values for debug
+    uniqueCategories[category] = (uniqueCategories[category] || 0) + 1;
+    uniqueSources[source] = (uniqueSources[source] || 0) + 1;
 
     // Filter: ACTUAL source only
     if (source !== sourceFilter) return;
@@ -75,6 +84,20 @@ function aggregateData(data) {
       buckets[monthKey].revenue += amount;
     }
   });
+
+  // DEBUG: show what's actually in the data
+  var debugPanel = document.getElementById("debug-panel");
+  var catList = Object.keys(uniqueCategories).sort().map(function (k) {
+    return "  \"" + k + "\" (" + uniqueCategories[k] + " rows)";
+  }).join("\n");
+  var srcList = Object.keys(uniqueSources).sort().map(function (k) {
+    return "  \"" + k + "\" (" + uniqueSources[k] + " rows)";
+  }).join("\n");
+  debugPanel.textContent = "DEBUG - Total rows: " + totalRows +
+    "\nColumns: " + JSON.stringify(data.columns) +
+    "\n\nP&L Category Names:\n" + catList +
+    "\n\nSOURCE values:\n" + srcList +
+    "\n\nMonths found: " + Object.keys(buckets).sort().join(", ");
 
   // Sort months chronologically
   var sortedKeys = Object.keys(buckets).sort();
@@ -105,6 +128,7 @@ function aggregateData(data) {
 
   return {
     months: months,
+    monthKeys: sortedKeys,
     laborDollars: laborDollars,
     dlPercents: dlPercents
   };
@@ -129,9 +153,12 @@ function buildChart(data) {
     }
   }
 
+  // Store month keys for drill-down filtering
+  var monthKeys = data.monthKeys;
+
   var ctx = document.getElementById("trendChart").getContext("2d");
 
-  new Chart(ctx, {
+  var chart = new Chart(ctx, {
     type: "bar",
     data: {
       labels: months,
@@ -279,6 +306,22 @@ function buildChart(data) {
           }
         }
       }
+    },
+    onClick: function (event, elements) {
+      if (elements.length === 0) return;
+      var idx = elements[0].index;
+      var monthKey = monthKeys[idx]; // e.g. "2026-01"
+
+      // Filter the dataset to the clicked month using domo.filterContainer
+      domo.filterContainer([
+        {
+          column: "MONTH",
+          dataSourceId: datasets[0],
+          operand: "EQUALS",
+          values: [monthKey + "-01"],
+          dataType: "date"
+        }
+      ]);
     }
   });
 }
