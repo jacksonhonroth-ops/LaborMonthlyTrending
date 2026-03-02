@@ -5,10 +5,10 @@
 
 var datasets = ["dataset"];
 
-// Column aliases matching manifest.json
+// Column names as returned by DOMO (uses actual dataset column names, not manifest aliases)
 var colMonth = "MONTH";
 var colAmount = "Amount";
-var colPLCategory = "PLCategoryName";
+var colPLCategory = "P&L Category Name";
 var colSource = "SOURCE";
 
 // P&L Category Name values that constitute "Direct Labor"
