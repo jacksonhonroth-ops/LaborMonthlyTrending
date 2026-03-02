@@ -12,10 +12,16 @@
         <h1 id="card-title">Labor MOM Trending</h1>
         <div id="legend">
           <span class="legend-item">
-            <span class="legend-bar"></span> Labor $
+            <span class="legend-bar actual"></span> Actual
           </span>
           <span class="legend-item">
-            <span class="legend-line"></span> DL %
+            <span class="legend-bar budget"></span> Budget
+          </span>
+          <span class="legend-item">
+            <span class="legend-line actual-line"></span> DL % Actual
+          </span>
+          <span class="legend-item">
+            <span class="legend-line budget-line"></span> DL % Budget
           </span>
         </div>
       </div>
@@ -26,8 +32,24 @@
         </div>
         <canvas id="trendChart"></canvas>
       </div>
-      <div id="debug-panel"></div>
     </div>
+
+    <!-- Drill-down table overlay -->
+    <div id="drilldown-overlay" class="hidden">
+      <div id="drilldown-modal">
+        <div id="drilldown-header">
+          <h2 id="drilldown-title"></h2>
+          <button id="drilldown-close">&times;</button>
+        </div>
+        <div id="drilldown-body">
+          <table id="drilldown-table">
+            <thead><tr id="drilldown-thead"></tr></thead>
+            <tbody id="drilldown-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <script src="https://unpkg.com/ryuu.js@4.6.0/dist/domo.js" integrity="sha384-YYsd9wQ+wDlUWhvpfGdptxmNYIqBC+52oJtWgPKJadbs3sSFTY/+ZotPbEHTTRWz" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="app.js"></script>
