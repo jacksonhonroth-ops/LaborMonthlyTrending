@@ -79,7 +79,6 @@ function aggregateData(data) {
       d = new Date(monthRaw);
     } else {
       var s = String(monthRaw);
-      // If it looks like epoch ms (all digits, 10+ chars), parse as number
       if (/^\d{10,}$/.test(s)) {
         d = new Date(parseInt(s, 10));
       } else {
@@ -87,11 +86,13 @@ function aggregateData(data) {
       }
     }
 
-    var year = d.getFullYear();
+    // Use UTC methods — DOMO date strings parse as UTC midnight, but
+    // getFullYear/getMonth use local time which shifts dates back a day
+    // in US timezones (e.g. "2026-02-01" UTC → Jan 31 in CT/PT)
+    var year = d.getUTCFullYear();
     if (year !== currentYear) return;
 
-    // Create month key like "2026-01"
-    var mm = ("0" + (d.getMonth() + 1)).slice(-2);
+    var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
     var monthKey = year + "-" + mm;
 
     if (!buckets[monthKey]) {
@@ -147,8 +148,9 @@ function aggregateData(data) {
     var revenue = buckets[key].revenue;
     laborDollars.push(labor);
 
-    // DL % = Labor $ / Revenue * 100
-    var dlPct = revenue !== 0 ? (labor / revenue) * 100 : 0;
+    // DL % = Labor $ / |Revenue| * 100 (revenue may be negative per accounting convention)
+    var absRevenue = Math.abs(revenue);
+    var dlPct = absRevenue !== 0 ? (labor / absRevenue) * 100 : 0;
     dlPercents.push(parseFloat(dlPct.toFixed(2)));
   });
 
