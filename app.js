@@ -12,7 +12,7 @@ var colPLCategory = "PLCategoryName";
 var colSource = "SOURCE";
 
 // P&L Category Name values that constitute "Direct Labor"
-var laborCategories = ["Direct Labor", "Total Labor"];
+var laborCategories = ["Total Labor"];
 var revenueCategory = "Service Revenue";
 
 // Only show ACTUAL data (not budget or forecast)
@@ -47,6 +47,7 @@ function aggregateData(data) {
   // DEBUG: collect unique values to diagnose mismatches
   var uniqueCategories = {};
   var uniqueSources = {};
+  var sampleDateRaw = null;
   var totalRows = data.rows.length;
 
   // Buckets: { "2026-01": { labor: 0, revenue: 0 } }
@@ -61,17 +62,31 @@ function aggregateData(data) {
     // Track unique values for debug
     uniqueCategories[category] = (uniqueCategories[category] || 0) + 1;
     uniqueSources[source] = (uniqueSources[source] || 0) + 1;
+    if (!sampleDateRaw) sampleDateRaw = monthRaw;
 
     // Filter: ACTUAL source only
     if (source !== sourceFilter) return;
 
-    // Filter: current year only
-    var dateStr = String(monthRaw);
-    var year = parseInt(dateStr.substring(0, 4), 10);
+    // Parse date - handle epoch ms (number), epoch string, or ISO string
+    var d;
+    if (typeof monthRaw === "number") {
+      d = new Date(monthRaw);
+    } else {
+      var s = String(monthRaw);
+      // If it looks like epoch ms (all digits, 10+ chars), parse as number
+      if (/^\d{10,}$/.test(s)) {
+        d = new Date(parseInt(s, 10));
+      } else {
+        d = new Date(s);
+      }
+    }
+
+    var year = d.getFullYear();
     if (year !== currentYear) return;
 
     // Create month key like "2026-01"
-    var monthKey = dateStr.substring(0, 7);
+    var mm = ("0" + (d.getMonth() + 1)).slice(-2);
+    var monthKey = year + "-" + mm;
 
     if (!buckets[monthKey]) {
       buckets[monthKey] = { labor: 0, revenue: 0 };
@@ -93,11 +108,16 @@ function aggregateData(data) {
   var srcList = Object.keys(uniqueSources).sort().map(function (k) {
     return "  \"" + k + "\" (" + uniqueSources[k] + " rows)";
   }).join("\n");
+  var bucketSummary = Object.keys(buckets).sort().map(function (k) {
+    return "  " + k + ": labor=" + buckets[k].labor.toFixed(0) + ", revenue=" + buckets[k].revenue.toFixed(0);
+  }).join("\n");
   debugPanel.textContent = "DEBUG - Total rows: " + totalRows +
     "\nColumns: " + JSON.stringify(data.columns) +
+    "\nSample date raw: " + JSON.stringify(sampleDateRaw) + " (type: " + typeof sampleDateRaw + ")" +
+    "\nColumn indices: month=" + monthIdx + " amount=" + amountIdx + " category=" + categoryIdx + " source=" + sourceIdx +
     "\n\nP&L Category Names:\n" + catList +
     "\n\nSOURCE values:\n" + srcList +
-    "\n\nMonths found: " + Object.keys(buckets).sort().join(", ");
+    "\n\nBuckets:\n" + bucketSummary;
 
   // Sort months chronologically
   var sortedKeys = Object.keys(buckets).sort();
