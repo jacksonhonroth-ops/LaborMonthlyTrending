@@ -1,19 +1,31 @@
 <html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Domo Brick</title>
+    <title>Labor Monthly Trend</title>
     <link rel="stylesheet" href="app.css" type="text/css">
-    <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,300,600" rel="stylesheet" type="text/css">
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700" rel="stylesheet" type="text/css">
     <style id="styles" type="text/css"></style>
   </head>
   <body>
-    <div id="htmlDiv">
-      <script src="https://cdn.jsdelivr.net/npm/@domoinc/domo-phoenix@0.20.1/build/global/domoPhoenix.js" integrity="sha256-PJtG25Rnodi+uoZmgWkpN5FdktOXKE1pGLgoYNfmeGw=" crossorigin="anonymous"></script>
-
-      <div id="myDiv"></div>
+    <div id="app">
+      <div id="card-header">
+        <h1 id="card-title">Labor MOM Trending</h1>
+        <div id="legend">
+          <span class="legend-item">
+            <span class="legend-bar"></span> Labor $
+          </span>
+          <span class="legend-item">
+            <span class="legend-line"></span> DL %
+          </span>
+        </div>
+      </div>
+      <div id="chart-container">
+        <canvas id="trendChart"></canvas>
+      </div>
     </div>
     <script src="https://unpkg.com/ryuu.js@4.6.0/dist/domo.js" integrity="sha384-YYsd9wQ+wDlUWhvpfGdptxmNYIqBC+52oJtWgPKJadbs3sSFTY/+ZotPbEHTTRWz" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="app.js"></script>
-  
+
 
 </body></html>

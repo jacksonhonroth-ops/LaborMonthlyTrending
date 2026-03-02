@@ -1,14 +1,15 @@
 {
-   "datasource": "20b8a2f9-8122-466c-b086-47b0a95c7ba2",
-   "device": "ad3-demo1-11",
+   "datasource": "Job_Financials_wo_JoinV2",
    "columns": [
-      "Campaign",
-      "Sales"
+      "Month",
+      "LaborDollars",
+      "DLPercent",
+      "Revenue"
    ],
    "metadata": [
       {
          "type": "STRING",
-         "dataSourceId": "20b8a2f9-8122-466c-b086-47b0a95c7ba2",
+         "dataSourceId": "Job_Financials_wo_JoinV2",
          "maxLength": -1,
          "minLength": -1,
          "aggregated": false,
@@ -16,7 +17,23 @@
       },
       {
          "type": "DOUBLE",
-         "dataSourceId": "20b8a2f9-8122-466c-b086-47b0a95c7ba2",
+         "dataSourceId": "Job_Financials_wo_JoinV2",
+         "maxLength": -1,
+         "minLength": -1,
+         "aggregated": true,
+         "analytic": false
+      },
+      {
+         "type": "DOUBLE",
+         "dataSourceId": "Job_Financials_wo_JoinV2",
+         "maxLength": -1,
+         "minLength": -1,
+         "aggregated": true,
+         "analytic": false
+      },
+      {
+         "type": "DOUBLE",
+         "dataSourceId": "Job_Financials_wo_JoinV2",
          "maxLength": -1,
          "minLength": -1,
          "aggregated": true,
@@ -24,29 +41,21 @@
       }
    ],
    "fromcache": "false",
-   "numColumns": 2,
+   "numColumns": 4,
    "rows": [
-      [
-         "Email",
-         45356622.47284928
-      ],
-      [
-         "Web",
-         30037628.592996057
-      ],
-      [
-         "TV",
-         13753137.055946836
-      ],
-      [
-         "Radio",
-         14761717.425294027
-      ],
-      [
-         "Ad impression",
-         45898357.91732186
-      ]
+      ["Jan 2025", 185000, 0.32, 578125],
+      ["Feb 2025", 192000, 0.33, 581818],
+      ["Mar 2025", 178000, 0.30, 593333],
+      ["Apr 2025", 201000, 0.35, 574286],
+      ["May 2025", 195000, 0.34, 573529],
+      ["Jun 2025", 210000, 0.36, 583333],
+      ["Jul 2025", 188000, 0.31, 606452],
+      ["Aug 2025", 215000, 0.37, 581081],
+      ["Sep 2025", 198000, 0.33, 600000],
+      ["Oct 2025", 220000, 0.38, 578947],
+      ["Nov 2025", 205000, 0.35, 585714],
+      ["Dec 2025", 225000, 0.39, 576923]
    ],
-   "numRows": 5,
+   "numRows": 12,
    "duration": "66"
 }
