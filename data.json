@@ -1,5 +1,5 @@
 {
-   "datasource": "Job_Financials_wo_JoinV2",
+   "datasource": "977fd639-75bb-422c-8773-a26488330bca",
    "columns": [
       "Month",
       "LaborDollars",
@@ -9,7 +9,7 @@
    "metadata": [
       {
          "type": "STRING",
-         "dataSourceId": "Job_Financials_wo_JoinV2",
+         "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca",
          "maxLength": -1,
          "minLength": -1,
          "aggregated": false,
@@ -17,7 +17,7 @@
       },
       {
          "type": "DOUBLE",
-         "dataSourceId": "Job_Financials_wo_JoinV2",
+         "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca",
          "maxLength": -1,
          "minLength": -1,
          "aggregated": true,
@@ -25,7 +25,7 @@
       },
       {
          "type": "DOUBLE",
-         "dataSourceId": "Job_Financials_wo_JoinV2",
+         "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca",
          "maxLength": -1,
          "minLength": -1,
          "aggregated": true,
@@ -33,7 +33,7 @@
       },
       {
          "type": "DOUBLE",
-         "dataSourceId": "Job_Financials_wo_JoinV2",
+         "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca",
          "maxLength": -1,
          "minLength": -1,
          "aggregated": true,
