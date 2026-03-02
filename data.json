@@ -1,0 +1,52 @@
+{
+   "datasource": "20b8a2f9-8122-466c-b086-47b0a95c7ba2",
+   "device": "ad3-demo1-11",
+   "columns": [
+      "Campaign",
+      "Sales"
+   ],
+   "metadata": [
+      {
+         "type": "STRING",
+         "dataSourceId": "20b8a2f9-8122-466c-b086-47b0a95c7ba2",
+         "maxLength": -1,
+         "minLength": -1,
+         "aggregated": false,
+         "analytic": false
+      },
+      {
+         "type": "DOUBLE",
+         "dataSourceId": "20b8a2f9-8122-466c-b086-47b0a95c7ba2",
+         "maxLength": -1,
+         "minLength": -1,
+         "aggregated": true,
+         "analytic": false
+      }
+   ],
+   "fromcache": "false",
+   "numColumns": 2,
+   "rows": [
+      [
+         "Email",
+         45356622.47284928
+      ],
+      [
+         "Web",
+         30037628.592996057
+      ],
+      [
+         "TV",
+         13753137.055946836
+      ],
+      [
+         "Radio",
+         14761717.425294027
+      ],
+      [
+         "Ad impression",
+         45898357.91732186
+      ]
+   ],
+   "numRows": 5,
+   "duration": "66"
+}
