@@ -1,14 +1,15 @@
 {
-   "datasource": "20b8a2f9-8122-466c-b086-47b0a95c7ba2",
-   "device": "ad3-demo1-11",
+   "datasource": "977fd639-75bb-422c-8773-a26488330bca",
    "columns": [
-      "Campaign",
-      "Sales"
+      "MONTH",
+      "Amount",
+      "PLCategoryName",
+      "SOURCE"
    ],
    "metadata": [
       {
-         "type": "STRING",
-         "dataSourceId": "20b8a2f9-8122-466c-b086-47b0a95c7ba2",
+         "type": "DATE",
+         "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca",
          "maxLength": -1,
          "minLength": -1,
          "aggregated": false,
@@ -16,37 +17,67 @@
       },
       {
          "type": "DOUBLE",
-         "dataSourceId": "20b8a2f9-8122-466c-b086-47b0a95c7ba2",
+         "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca",
          "maxLength": -1,
          "minLength": -1,
-         "aggregated": true,
+         "aggregated": false,
+         "analytic": false
+      },
+      {
+         "type": "STRING",
+         "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca",
+         "maxLength": -1,
+         "minLength": -1,
+         "aggregated": false,
+         "analytic": false
+      },
+      {
+         "type": "STRING",
+         "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca",
+         "maxLength": -1,
+         "minLength": -1,
+         "aggregated": false,
          "analytic": false
       }
    ],
    "fromcache": "false",
-   "numColumns": 2,
+   "numColumns": 4,
    "rows": [
-      [
-         "Email",
-         45356622.47284928
-      ],
-      [
-         "Web",
-         30037628.592996057
-      ],
-      [
-         "TV",
-         13753137.055946836
-      ],
-      [
-         "Radio",
-         14761717.425294027
-      ],
-      [
-         "Ad impression",
-         45898357.91732186
-      ]
+      ["2026-01-01", 95000, "Direct Labor", "ACTUAL"],
+      ["2026-01-01", 48000, "Total Labor", "ACTUAL"],
+      ["2026-01-01", 12000, "Field Overhead", "ACTUAL"],
+      ["2026-01-01", 410000, "Service Revenue", "ACTUAL"],
+      ["2026-01-01", 95000, "Direct Labor", "OPS_FIN_BUDGET"],
+      ["2026-01-01", 400000, "Service Revenue", "OPS_FIN_BUDGET"],
+      ["2026-02-01", 102000, "Direct Labor", "ACTUAL"],
+      ["2026-02-01", 50000, "Total Labor", "ACTUAL"],
+      ["2026-02-01", 13000, "Field Overhead", "ACTUAL"],
+      ["2026-02-01", 425000, "Service Revenue", "ACTUAL"],
+      ["2026-02-01", 98000, "Direct Labor", "OPS_FIN_BUDGET"],
+      ["2026-02-01", 410000, "Service Revenue", "OPS_FIN_BUDGET"],
+      ["2026-03-01", 98000, "Direct Labor", "ACTUAL"],
+      ["2026-03-01", 52000, "Total Labor", "ACTUAL"],
+      ["2026-03-01", 11500, "Field Overhead", "ACTUAL"],
+      ["2026-03-01", 430000, "Service Revenue", "ACTUAL"],
+      ["2026-04-01", 105000, "Direct Labor", "OPS_FIN_BUDGET"],
+      ["2026-04-01", 445000, "Service Revenue", "OPS_FIN_BUDGET"],
+      ["2026-05-01", 108000, "Direct Labor", "OPS_FIN_BUDGET"],
+      ["2026-05-01", 450000, "Service Revenue", "OPS_FIN_BUDGET"],
+      ["2026-06-01", 110000, "Direct Labor", "OPS_FIN_BUDGET"],
+      ["2026-06-01", 460000, "Service Revenue", "OPS_FIN_BUDGET"],
+      ["2026-07-01", 107000, "Direct Labor", "OPS_FIN_BUDGET"],
+      ["2026-07-01", 455000, "Service Revenue", "OPS_FIN_BUDGET"],
+      ["2026-08-01", 112000, "Direct Labor", "OPS_FIN_BUDGET"],
+      ["2026-08-01", 465000, "Service Revenue", "OPS_FIN_BUDGET"],
+      ["2026-09-01", 109000, "Direct Labor", "OPS_FIN_BUDGET"],
+      ["2026-09-01", 458000, "Service Revenue", "OPS_FIN_BUDGET"],
+      ["2026-10-01", 115000, "Direct Labor", "OPS_FIN_BUDGET"],
+      ["2026-10-01", 470000, "Service Revenue", "OPS_FIN_BUDGET"],
+      ["2026-11-01", 111000, "Direct Labor", "OPS_FIN_BUDGET"],
+      ["2026-11-01", 462000, "Service Revenue", "OPS_FIN_BUDGET"],
+      ["2026-12-01", 118000, "Direct Labor", "OPS_FIN_BUDGET"],
+      ["2026-12-01", 475000, "Service Revenue", "OPS_FIN_BUDGET"]
    ],
-   "numRows": 5,
+   "numRows": 34,
    "duration": "66"
 }
