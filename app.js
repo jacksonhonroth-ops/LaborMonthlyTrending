@@ -25,10 +25,7 @@ var currentYear = 2026;
 var fields = [colMonth, colAmount, colPLCategory, colSource];
 var query = "/data/v1/" + datasets[0] + "?fields=" + fields.join();
 
-// Switch between local sample data and live DOMO query:
-// Live:  domo.get(query, { format: "array-of-arrays" })
-// Local: domo.get('./data.json')
-domo.get("./data.json")
+domo.get(query, { format: "array-of-arrays" })
   .then(function (data) {
     var processed = aggregateData(data);
     buildChart(processed);
