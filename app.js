@@ -1,47 +1,115 @@
 // Labor MOM Trending Card
-// Data source: Job_Financials_wo_JoinV2
-// Displays Labor $ (bar) and DL % (line) on a dual-axis monthly trend chart
+// Data source: Job_Financials_wo_JoinV2 (977fd639-75bb-422c-8773-a26488330bca)
+// Aggregates Amount by P&L Category Name to derive Labor $ and DL %
+// Filters to ACTUAL source and current year (2026)
 
 var datasets = ["dataset"];
 
 // Column aliases matching manifest.json
-var colMonth = "Month";
-var colLaborDollars = "LaborDollars";
-var colDLPercent = "DLPercent";
+var colMonth = "MONTH";
+var colAmount = "Amount";
+var colPLCategory = "PLCategoryName";
+var colSource = "SOURCE";
+
+// P&L Category Name values that constitute "Direct Labor"
+var laborCategories = ["Direct Labor", "Total Labor"];
+var revenueCategory = "Service Revenue";
+
+// Only show ACTUAL data (not budget or forecast)
+var sourceFilter = "ACTUAL";
+
+// Current year filter
+var currentYear = 2026;
 
 // Data query for live DOMO data
-var fields = [colMonth, colLaborDollars, colDLPercent];
-var groupby = [colMonth];
-var orderby = [colMonth];
-var query = "/data/v1/" + datasets[0] +
-  "?fields=" + fields.join() +
-  "&groupby=" + groupby.join() +
-  "&orderby=" + orderby.join();
+var fields = [colMonth, colAmount, colPLCategory, colSource];
+var query = "/data/v1/" + datasets[0] + "?fields=" + fields.join();
 
 // Switch between local sample data and live DOMO query:
 // Live:  domo.get(query, { format: "array-of-arrays" })
 // Local: domo.get('./data.json')
 domo.get("./data.json")
   .then(function (data) {
-    buildChart(data);
+    var processed = aggregateData(data);
+    buildChart(processed);
   });
 
-function buildChart(data) {
+function aggregateData(data) {
+  var monthIdx = data.columns.indexOf(colMonth);
+  var amountIdx = data.columns.indexOf(colAmount);
+  var categoryIdx = data.columns.indexOf(colPLCategory);
+  var sourceIdx = data.columns.indexOf(colSource);
+
+  // Buckets: { "2026-01": { labor: 0, revenue: 0 } }
+  var buckets = {};
+
+  data.rows.forEach(function (row) {
+    var monthRaw = row[monthIdx];
+    var amount = parseFloat(row[amountIdx]) || 0;
+    var category = row[categoryIdx];
+    var source = row[sourceIdx];
+
+    // Filter: ACTUAL source only
+    if (source !== sourceFilter) return;
+
+    // Filter: current year only
+    var dateStr = String(monthRaw);
+    var year = parseInt(dateStr.substring(0, 4), 10);
+    if (year !== currentYear) return;
+
+    // Create month key like "2026-01"
+    var monthKey = dateStr.substring(0, 7);
+
+    if (!buckets[monthKey]) {
+      buckets[monthKey] = { labor: 0, revenue: 0 };
+    }
+
+    // Categorize amounts
+    if (laborCategories.indexOf(category) !== -1) {
+      buckets[monthKey].labor += amount;
+    } else if (category === revenueCategory) {
+      buckets[monthKey].revenue += amount;
+    }
+  });
+
+  // Sort months chronologically
+  var sortedKeys = Object.keys(buckets).sort();
+
   var months = [];
   var laborDollars = [];
   var dlPercents = [];
 
-  // Column index lookup
-  var monthIdx = data.columns.indexOf(colMonth);
-  var laborIdx = data.columns.indexOf(colLaborDollars);
-  var dlIdx = data.columns.indexOf(colDLPercent);
+  var monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+  ];
 
-  // Parse rows
-  data.rows.forEach(function (row) {
-    months.push(row[monthIdx]);
-    laborDollars.push(row[laborIdx]);
-    dlPercents.push(row[dlIdx] * 100); // convert decimal to percentage display
+  sortedKeys.forEach(function (key) {
+    var parts = key.split("-");
+    var monthNum = parseInt(parts[1], 10);
+    var label = monthNames[monthNum - 1] + " " + parts[0];
+    months.push(label);
+
+    var labor = buckets[key].labor;
+    var revenue = buckets[key].revenue;
+    laborDollars.push(labor);
+
+    // DL % = Labor $ / Revenue * 100
+    var dlPct = revenue !== 0 ? (labor / revenue) * 100 : 0;
+    dlPercents.push(parseFloat(dlPct.toFixed(2)));
   });
+
+  return {
+    months: months,
+    laborDollars: laborDollars,
+    dlPercents: dlPercents
+  };
+}
+
+function buildChart(data) {
+  var months = data.months;
+  var laborDollars = data.laborDollars;
+  var dlPercents = data.dlPercents;
 
   // Calculate MOM changes
   var momLaborChange = [];
@@ -51,8 +119,7 @@ function buildChart(data) {
       momLaborChange.push(null);
       momDLChange.push(null);
     } else {
-      var laborChg = laborDollars[i] - laborDollars[i - 1];
-      momLaborChange.push(laborChg);
+      momLaborChange.push(laborDollars[i] - laborDollars[i - 1]);
       var dlChg = dlPercents[i] - dlPercents[i - 1];
       momDLChange.push(parseFloat(dlChg.toFixed(2)));
     }
@@ -104,7 +171,7 @@ function buildChart(data) {
       },
       plugins: {
         legend: {
-          display: false // using custom legend in HTML
+          display: false
         },
         tooltip: {
           backgroundColor: "rgba(0,0,0,0.8)",

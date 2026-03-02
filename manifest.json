@@ -9,26 +9,26 @@
          "dataSetId": "977fd639-75bb-422c-8773-a26488330bca",
          "fields": [
             {
-               "alias": "Month",
-               "columnName": "Month",
+               "alias": "MONTH",
+               "columnName": "MONTH",
                "fieldType": null,
                "beastModeName": null
             },
             {
-               "alias": "LaborDollars",
-               "columnName": "Labor $",
+               "alias": "Amount",
+               "columnName": "Amount",
                "fieldType": null,
                "beastModeName": null
             },
             {
-               "alias": "DLPercent",
-               "columnName": "DL %",
+               "alias": "PLCategoryName",
+               "columnName": "P&L Category Name",
                "fieldType": null,
                "beastModeName": null
             },
             {
-               "alias": "Revenue",
-               "columnName": "Revenue",
+               "alias": "SOURCE",
+               "columnName": "SOURCE",
                "fieldType": null,
                "beastModeName": null
             }
