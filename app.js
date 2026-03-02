@@ -58,6 +58,8 @@ function aggregateData(data) {
 
   // Buckets: { "2026-01": { labor: 0, revenue: 0 } }
   var buckets = {};
+  // Track per-month category breakdown for debug
+  var monthCats = {};
 
   data.rows.forEach(function (row) {
     var monthRaw = row[monthIdx];
@@ -99,6 +101,12 @@ function aggregateData(data) {
       buckets[monthKey] = { labor: 0, revenue: 0 };
     }
 
+    // Track category amounts per month for debug
+    if (!monthCats[monthKey]) monthCats[monthKey] = {};
+    if (!monthCats[monthKey][category]) monthCats[monthKey][category] = { sum: 0, count: 0 };
+    monthCats[monthKey][category].sum += amount;
+    monthCats[monthKey][category].count += 1;
+
     // Categorize amounts
     if (laborCategories.indexOf(category) !== -1) {
       buckets[monthKey].labor += amount;
@@ -112,19 +120,22 @@ function aggregateData(data) {
   var catList = Object.keys(uniqueCategories).sort().map(function (k) {
     return "  \"" + k + "\" (" + uniqueCategories[k] + " rows)";
   }).join("\n");
-  var srcList = Object.keys(uniqueSources).sort().map(function (k) {
-    return "  \"" + k + "\" (" + uniqueSources[k] + " rows)";
-  }).join("\n");
   var bucketSummary = Object.keys(buckets).sort().map(function (k) {
-    return "  " + k + ": labor=" + buckets[k].labor.toFixed(0) + ", revenue=" + buckets[k].revenue.toFixed(0);
+    var detail = "";
+    if (monthCats[k]) {
+      detail = Object.keys(monthCats[k]).sort().map(function (cat) {
+        var mc = monthCats[k][cat];
+        return "      " + cat + ": $" + mc.sum.toFixed(0) + " (" + mc.count + " rows)";
+      }).join("\n");
+    }
+    return "  " + k + ": labor=" + buckets[k].labor.toFixed(0) +
+      ", revenue=" + buckets[k].revenue.toFixed(0) + "\n" + detail;
   }).join("\n");
   debugPanel.textContent = "DEBUG - Total rows: " + totalRows +
     "\nColumns: " + JSON.stringify(data.columns) +
     "\nSample date raw: " + JSON.stringify(sampleDateRaw) + " (type: " + typeof sampleDateRaw + ")" +
     "\nColumn indices: month=" + monthIdx + " amount=" + amountIdx + " category=" + categoryIdx + " source=" + sourceIdx +
-    "\n\nP&L Category Names:\n" + catList +
-    "\n\nSOURCE values:\n" + srcList +
-    "\n\nBuckets:\n" + bucketSummary;
+    "\n\nBuckets (ACTUAL, " + currentYear + " only, per-category breakdown):\n" + bucketSummary;
 
   // Sort months chronologically
   var sortedKeys = Object.keys(buckets).sort();
