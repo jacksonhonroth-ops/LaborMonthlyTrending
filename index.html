@@ -46,19 +46,11 @@
         </div>
         <div class="filter-group">
           <label for="filter-job">Job Number</label>
-          <div class="search-select" id="ss-job">
-            <input type="text" id="filter-job" placeholder="All" autocomplete="off">
-            <span class="ss-clear hidden">&times;</span>
-            <div class="ss-dropdown hidden"></div>
-          </div>
+          <select id="filter-job"><option value="">All</option></select>
         </div>
         <div class="filter-group">
           <label for="filter-account">Parent Account</label>
-          <div class="search-select" id="ss-account">
-            <input type="text" id="filter-account" placeholder="All" autocomplete="off">
-            <span class="ss-clear hidden">&times;</span>
-            <div class="ss-dropdown hidden"></div>
-          </div>
+          <select id="filter-account"><option value="">All</option></select>
         </div>
         <div class="filter-group">
           <label for="filter-ops">Ops Lead</label>
@@ -72,10 +64,6 @@
         <div id="loader">
           <div class="spinner"></div>
           <span id="loader-text">Loading data...</span>
-          <div id="loader-progress-wrap">
-            <div id="loader-progress-bar"></div>
-          </div>
-          <span id="loader-percent">0%</span>
         </div>
         <canvas id="trendChart"></canvas>
       </div>
