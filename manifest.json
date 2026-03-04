@@ -10,54 +10,37 @@
          "fields": [
             {
                "alias": "MONTH",
-               "columnName": "MONTH",
-               "fieldType": null,
-               "beastModeName": null
+               "columnName": "MONTH"
             },
             {
                "alias": "Amount",
-               "columnName": "Amount",
-               "fieldType": null,
-               "beastModeName": null
+               "columnName": "Amount"
             },
             {
                "alias": "PLCategoryName",
-               "columnName": "P&L Category Name",
-               "fieldType": null,
-               "beastModeName": null
+               "columnName": "P&L Category Name"
             },
             {
                "alias": "SOURCE",
-               "columnName": "SOURCE",
-               "fieldType": null,
-               "beastModeName": null
+               "columnName": "SOURCE"
             },
             {
                "alias": "Region",
-               "columnName": "Region",
-               "fieldType": null,
-               "beastModeName": null
+               "columnName": "Region"
             },
             {
                "alias": "JobNumber",
-               "columnName": "Job Number",
-               "fieldType": null,
-               "beastModeName": null
+               "columnName": "Job Number"
             },
             {
                "alias": "ParentAccount",
-               "columnName": "Parent Account",
-               "fieldType": null,
-               "beastModeName": null
+               "columnName": "Parent Account"
             },
             {
                "alias": "OpsLead",
-               "columnName": "Ops Lead",
-               "fieldType": null,
-               "beastModeName": null
+               "columnName": "Ops Lead"
             }
-         ],
-         "dql": null
+         ]
       }
    ],
    "size": {
