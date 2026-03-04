@@ -1,6 +1,6 @@
 {
-   "id": "0cefbd35-8ecf-4859-a862-1f70276323a7",
-   "name": "Labor Monthly Trend",
+   "id": "980d6cca-a620-419f-980c-272d438529b6",
+   "name": "MoMLaborTrending",
    "description": "Labor MOM Trending card showing DL % and Labor $ from Job_Financials_wo_JoinV2",
    "version": "1.0.0",
    "datasetsMapping": [
