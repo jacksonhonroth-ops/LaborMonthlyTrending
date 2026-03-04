@@ -5,7 +5,7 @@
    ================================================================ */
 
 // ── CONFIG ──────────────────────────────────────────────────────
-var DATASET    = 'gl_financials';
+var DATASET    = 'dataset';
 var CURRENT_YEAR = new Date().getFullYear();     // 2026
 
 // Map P&L Category Names from the dataset to display rows.
@@ -92,7 +92,7 @@ function fetchData() {
 // ── DETECT CLOSING PERIOD ───────────────────────────────────────
 function detectClosingPeriod(rows) {
   var maxDate = null;
-  var cpIdx = COL['MostRecentClosingPeriod'];
+  var cpIdx = COL['mostrecentclosingperiod'];
   if (cpIdx !== undefined) {
     for (var i = 0; i < rows.length; i++) {
       var d = parseDate(rows[i][cpIdx]);
@@ -129,7 +129,7 @@ function aggregateData(rows) {
   }
 
   var mIdx  = COL['MONTH'];
-  var aIdx  = COL['Amount'];
+  var aIdx  = COL['AMOUNT'];
   var plIdx = COL['PLCategoryName'];
   var sIdx  = COL['SOURCE'];
 
