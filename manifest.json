@@ -1,7 +1,7 @@
 {
    "id": "980d6cca-a620-419f-980c-272d438529b6",
    "name": "MoMLaborTrending",
-   "version": "1.0.0",
+   "version": "0.0.1",
    "datasetsMapping": [
       {
          "dataSetId": "977fd639-75bb-422c-8773-a26488330bca",
