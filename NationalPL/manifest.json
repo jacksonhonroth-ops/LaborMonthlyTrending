@@ -1,0 +1,42 @@
+{
+   "name": "NationalPL",
+   "version": "0.0.1",
+   "datasetsMapping": [
+      {
+         "dataSetId": "6c5e3f1b-56c4-4273-98ec-4af164645cfa",
+         "alias": "dataset",
+         "fields": [
+            { "alias": "MONTH", "columnName": "MONTH" },
+            { "alias": "AMOUNT", "columnName": "AMOUNT" },
+            { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
+            { "alias": "SOURCE", "columnName": "SOURCE" },
+            { "alias": "Region", "columnName": "Region" },
+            { "alias": "GLAccountNumber", "columnName": "GLAccountNumber" },
+            { "alias": "GLAccountDescription", "columnName": "GL Account Description" },
+            { "alias": "GLPostingDate", "columnName": "GLPostingDate" },
+            { "alias": "GLPostingDateFDOM", "columnName": "GLPostingDateFDOM" },
+            { "alias": "mostrecentclosingperiod", "columnName": "most_recent_closing_period" },
+            { "alias": "Column", "columnName": "Column" },
+            { "alias": "ColumnIndex", "columnName": "Column Index" },
+            { "alias": "Metrics", "columnName": "Metrics" },
+            { "alias": "PLCategories", "columnName": "P&L Categories" },
+            { "alias": "PLSubCategory", "columnName": "P&L SubCategory" },
+            { "alias": "AddbackType", "columnName": "Addback_Type" },
+            { "alias": "Category", "columnName": "Category" },
+            { "alias": "Active", "columnName": "Active" },
+            { "alias": "Type", "columnName": "Type" },
+            { "alias": "Companies", "columnName": "Companies" },
+            { "alias": "Notes", "columnName": "Notes" },
+            { "alias": "GLNumber", "columnName": "GL Number" },
+            { "alias": "AccountDescription", "columnName": "Account Description" },
+            { "alias": "MetricsCategory", "columnName": "Metrics Category" },
+            { "alias": "MonthlyAlloc", "columnName": "MonthlyAlloc" },
+            { "alias": "ACTUALVSBUDGET", "columnName": "ACTUALVSBUDGET" },
+            { "alias": "BUDGET", "columnName": "BUDGET" },
+            { "alias": "ACTUAL", "columnName": "ACTUAL" }
+         ]
+      }
+   ],
+   "size": { "width": 6, "height": 4 },
+   "fullpage": true
+}
