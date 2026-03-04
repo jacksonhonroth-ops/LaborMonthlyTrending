@@ -5,9 +5,6 @@
 
 var datasets = ["dataset"];
 
-// Manifest aliases used in the query URL
-var queryAliases = ["MONTH", "Amount", "PLCategoryName", "SOURCE", "Region", "JobNumber", "ParentAccount", "OpsLead"];
-
 // P&L Category Name values that constitute labor
 var laborCategories = ["Total Labor"];
 var revenueCategory = "Service Revenue";
@@ -20,7 +17,7 @@ var sourceBudget = "OPS_FIN_BUDGET";
 var currentYear = 2026;
 
 // Data query for live DOMO data
-var query = "/data/v1/" + datasets[0] + "?fields=" + queryAliases.join();
+var query = "/data/v1/" + datasets[0];
 
 // Find a column index by trying multiple possible names
 function findCol(columns, names) {
