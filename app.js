@@ -235,7 +235,6 @@ function initSearchSelect(wrapperId, inputId, allValues, onChange) {
     selectedValue = ""; // Clear locked selection while typing
     clearBtn.classList.add("hidden");
     showDropdown();
-    onChange();
   });
 
   input.addEventListener("keydown", function (e) {
@@ -292,27 +291,12 @@ function getFilteredRows() {
   var aVal = ssAccount ? ssAccount.getValue() : "";
   var oVal = filterOps.value;
 
-  // Also check partial text input for substring matching
-  var jInput = document.getElementById("filter-job").value;
-  var aInput = document.getElementById("filter-account").value;
-
-  if (!rVal && !jVal && !jInput && !aVal && !aInput && !oVal) return rawData.rows;
+  if (!rVal && !jVal && !aVal && !oVal) return rawData.rows;
 
   return rawData.rows.filter(function (row) {
     if (rVal && row[colIndices.region] !== rVal) return false;
-    // For search-selects: exact match if selected, substring if typing
-    if (jVal) {
-      if (row[colIndices.job] !== jVal) return false;
-    } else if (jInput) {
-      var rowJob = (row[colIndices.job] || "").toLowerCase();
-      if (rowJob.indexOf(jInput.toLowerCase()) === -1) return false;
-    }
-    if (aVal) {
-      if (row[colIndices.account] !== aVal) return false;
-    } else if (aInput) {
-      var rowAcct = (row[colIndices.account] || "").toLowerCase();
-      if (rowAcct.indexOf(aInput.toLowerCase()) === -1) return false;
-    }
+    if (jVal && row[colIndices.job] !== jVal) return false;
+    if (aVal && row[colIndices.account] !== aVal) return false;
     if (oVal && row[colIndices.opsLead] !== oVal) return false;
     return true;
   });
