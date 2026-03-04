@@ -20,8 +20,7 @@ var sourceBudget = "OPS_FIN_BUDGET";
 var currentYear = 2026;
 
 // Data query for live DOMO data
-var queryWithFields = "/data/v1/" + datasets[0] + "?fields=" + queryAliases.join();
-var queryWithoutFields = "/data/v1/" + datasets[0];
+var query = "/data/v1/" + datasets[0];
 
 // Find a column index by trying multiple possible names
 function findCol(columns, names) {
@@ -89,32 +88,14 @@ var fetchTimer = setInterval(function () {
   setProgress(fetchProgress, "Fetching from Job Financials...");
 }, 200);
 
-// Fetch data — try with field filtering first, fall back to full dataset
-console.log("[LaborMOM] Starting fetch...");
+// Fetch data
+console.log("[LaborMOM] Starting fetch:", query);
 var fetchStartTime = Date.now();
 
-function fetchData() {
-  console.log("[LaborMOM] Trying:", queryWithFields);
-  return domo.get(queryWithFields, { format: "array-of-arrays" })
-    .then(function (result) {
-      console.log("[LaborMOM] Fetch with fields succeeded in " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s, rows:", result.rows ? result.rows.length : "unknown");
-      return result;
-    })
-    .catch(function (err) {
-      console.warn("[LaborMOM] Fetch with fields failed (400), trying without fields...", err);
-      setProgress(fetchProgress, "Retrying without field filter...");
-      return domo.get(queryWithoutFields, { format: "array-of-arrays" })
-        .then(function (result) {
-          console.log("[LaborMOM] Fetch without fields succeeded in " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s, rows:", result.rows ? result.rows.length : "unknown");
-          return result;
-        });
-    });
-}
-
-fetchData()
+domo.get(query, { format: "array-of-arrays" })
   .then(function (data) {
     clearInterval(fetchTimer);
-    console.log("[LaborMOM] Total fetch time: " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s");
+    console.log("[LaborMOM] Fetch succeeded in " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s");
     console.log("[LaborMOM] Columns:", data.columns);
     console.log("[LaborMOM] Row count:", data.rows ? data.rows.length : 0);
     setProgress(75, "Processing " + data.rows.length.toLocaleString() + " rows...");
