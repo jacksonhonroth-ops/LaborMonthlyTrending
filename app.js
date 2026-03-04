@@ -88,60 +88,104 @@ var fetchTimer = setInterval(function () {
   setProgress(fetchProgress, "Fetching from Job Financials...");
 }, 200);
 
-// Fetch data
+// ─── Data processing ─────────────────────────────────────────────────
+
+function processData(data) {
+  console.log("[LaborMOM] Columns:", data.columns);
+  console.log("[LaborMOM] Row count:", data.rows ? data.rows.length : 0);
+  setProgress(75, "Processing " + data.rows.length.toLocaleString() + " rows...");
+
+  rawData = data;
+  colIndices = {
+    month: findCol(data.columns, ["MONTH", "Month", "month"]),
+    amount: findCol(data.columns, ["Amount", "amount", "AMOUNT"]),
+    category: findCol(data.columns, ["PLCategoryName", "P&L Category Name", "P&L_Category_Name"]),
+    source: findCol(data.columns, ["SOURCE", "Source", "source"]),
+    region: findCol(data.columns, ["Region", "region", "REGION"]),
+    job: findCol(data.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
+    account: findCol(data.columns, ["ParentAccount", "Parent Account", "PARENT_ACCOUNT"]),
+    opsLead: findCol(data.columns, ["OpsLead", "Ops Lead", "OPS_LEAD"])
+  };
+
+  console.log("[LaborMOM] Column indices:", JSON.stringify(colIndices));
+
+  relevantRows = [];
+  var cMonth = colIndices.month;
+  var cSource = colIndices.source;
+  var total = data.rows.length;
+  var yearPrefix = currentYear + "-";
+
+  for (var i = 0; i < total; i++) {
+    var row = data.rows[i];
+    var source = row[cSource];
+    if (source !== sourceActual && source !== sourceBudget) continue;
+    var mk = parseMonthKey(row[cMonth]);
+    if (mk.substring(0, 5) !== yearPrefix) continue;
+    row._monthKey = mk;
+    relevantRows.push(row);
+  }
+
+  console.log("[LaborMOM] Relevant rows after filtering: " + relevantRows.length);
+  setProgress(85, "Building filters...");
+  populateFilters(relevantRows, colIndices);
+  setProgress(95, "Rendering chart...");
+  refreshView();
+  setProgress(100, "Done");
+  loader.classList.add("hidden");
+}
+
+// Convert array-of-objects response to array-of-arrays format
+function normalizeToArrayOfArrays(objArray) {
+  if (!objArray || objArray.length === 0) {
+    return { columns: [], rows: [] };
+  }
+  var columns = Object.keys(objArray[0]);
+  var rows = [];
+  for (var i = 0; i < objArray.length; i++) {
+    var row = [];
+    for (var c = 0; c < columns.length; c++) {
+      row.push(objArray[i][columns[c]]);
+    }
+    rows.push(row);
+  }
+  return { columns: columns, rows: rows };
+}
+
+// Fetch data — try array-of-arrays first, then default JSON format as fallback
 console.log("[LaborMOM] Starting fetch:", query);
 var fetchStartTime = Date.now();
 
 domo.get(query, { format: "array-of-arrays" })
   .then(function (data) {
     clearInterval(fetchTimer);
-    console.log("[LaborMOM] Fetch succeeded in " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s");
-    console.log("[LaborMOM] Columns:", data.columns);
-    console.log("[LaborMOM] Row count:", data.rows ? data.rows.length : 0);
-    setProgress(75, "Processing " + data.rows.length.toLocaleString() + " rows...");
-
-    rawData = data;
-    colIndices = {
-      month: findCol(data.columns, ["MONTH", "Month", "month"]),
-      amount: findCol(data.columns, ["Amount", "amount", "AMOUNT"]),
-      category: findCol(data.columns, ["PLCategoryName", "P&L Category Name", "P&L_Category_Name"]),
-      source: findCol(data.columns, ["SOURCE", "Source", "source"]),
-      region: findCol(data.columns, ["Region", "region", "REGION"]),
-      job: findCol(data.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
-      account: findCol(data.columns, ["ParentAccount", "Parent Account", "PARENT_ACCOUNT"]),
-      opsLead: findCol(data.columns, ["OpsLead", "Ops Lead", "OPS_LEAD"])
-    };
-
-    // Attach cached monthKey to each row (server already filtered year/source if SQL worked)
-    relevantRows = [];
-    var cMonth = colIndices.month;
-    var cSource = colIndices.source;
-    var total = data.rows.length;
-    var yearPrefix = currentYear + "-";
-
-    for (var i = 0; i < total; i++) {
-      var row = data.rows[i];
-      var source = row[cSource];
-      // Guard in case fallback returned unfiltered data
-      if (source !== sourceActual && source !== sourceBudget) continue;
-      var mk = parseMonthKey(row[cMonth]);
-      if (mk.substring(0, 5) !== yearPrefix) continue;
-      row._monthKey = mk;
-      relevantRows.push(row);
-    }
-
-    setProgress(85, "Building filters...");
-    populateFilters(relevantRows, colIndices);
-    setProgress(95, "Rendering chart...");
-    refreshView();
-    setProgress(100, "Done");
-    loader.classList.add("hidden");
+    console.log("[LaborMOM] Fetch (array-of-arrays) succeeded in " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s");
+    processData(data);
   })
-  .catch(function (err) {
-    clearInterval(fetchTimer);
-    console.error("[LaborMOM] Fatal error:", err);
-    setProgress(0, "Error loading data — check console");
-    loaderText.style.color = "#e74c3c";
+  .catch(function (err1) {
+    console.warn("[LaborMOM] array-of-arrays failed:", err1, "— trying default format...");
+    setProgress(50, "Retrying with default format...");
+    domo.get(query)
+      .then(function (objData) {
+        clearInterval(fetchTimer);
+        console.log("[LaborMOM] Fetch (default) succeeded in " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s");
+        console.log("[LaborMOM] Got " + (Array.isArray(objData) ? objData.length : "non-array") + " records");
+        if (Array.isArray(objData)) {
+          processData(normalizeToArrayOfArrays(objData));
+        } else {
+          throw new Error("Unexpected response format: " + typeof objData);
+        }
+      })
+      .catch(function (err2) {
+        clearInterval(fetchTimer);
+        console.error("[LaborMOM] Both fetch methods failed.");
+        console.error("[LaborMOM] Error 1 (array-of-arrays):", err1);
+        console.error("[LaborMOM] Error 2 (default):", err2);
+        console.error("[LaborMOM] This usually means the app needs to be republished to DOMO (domo publish).");
+        setProgress(0, "");
+        loaderText.innerHTML = 'Data fetch failed (400).<br><span style="font-size:11px;color:#999">The app may need to be republished — run <code>domo publish</code></span>';
+        loaderText.style.color = "#e74c3c";
+        loaderText.style.textAlign = "center";
+      });
   });
 
 // ─── Filters ──────────────────────────────────────────────────────────
