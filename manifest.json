@@ -31,6 +31,30 @@
                "columnName": "SOURCE",
                "fieldType": null,
                "beastModeName": null
+            },
+            {
+               "alias": "Region",
+               "columnName": "Region",
+               "fieldType": null,
+               "beastModeName": null
+            },
+            {
+               "alias": "JobNumber",
+               "columnName": "Job Number",
+               "fieldType": null,
+               "beastModeName": null
+            },
+            {
+               "alias": "ParentAccount",
+               "columnName": "Parent Account",
+               "fieldType": null,
+               "beastModeName": null
+            },
+            {
+               "alias": "OpsLead",
+               "columnName": "Ops Lead",
+               "fieldType": null,
+               "beastModeName": null
             }
          ],
          "dql": null
