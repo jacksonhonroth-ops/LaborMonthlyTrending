@@ -85,7 +85,7 @@ domo.get("/data/v1/dataset")
       region: findCol(rawData.columns, ["Region", "region", "REGION"]),
       job: findCol(rawData.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
       account: findCol(rawData.columns, ["ParentAccount", "Parent Account", "PARENT_ACCOUNT"]),
-      opsLead: findCol(rawData.columns, ["OpsLead", "Ops Lead", "OPS_LEAD"])
+      opsLead: findCol(rawData.columns, ["OpsLead", "Operations Lead", "Ops Lead", "OPS_LEAD"])
     };
     console.log("[LaborMOM] Column indices:", JSON.stringify(colIndices));
     populateFilters(rawData, colIndices);

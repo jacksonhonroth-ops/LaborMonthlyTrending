@@ -30,7 +30,7 @@
             },
             {
                "alias": "JobNumber",
-               "columnName": "Job Number"
+               "columnName": "JobNumber"
             },
             {
                "alias": "ParentAccount",
@@ -38,7 +38,7 @@
             },
             {
                "alias": "OpsLead",
-               "columnName": "Ops Lead"
+               "columnName": "Operations Lead"
             }
          ]
       }
