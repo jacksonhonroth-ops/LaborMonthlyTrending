@@ -6,7 +6,6 @@
    "datasetsMapping": [
       {
          "alias": "dataset",
-         "dataSetId": "977fd639-75bb-422c-8773-a26488330bca",
          "fields": [
             {
                "alias": "MONTH",
