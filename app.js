@@ -101,7 +101,7 @@ var fetchTimer = setInterval(function () {
 
 // Try SQL endpoint first (server-side filtering), fall back to full pull
 function fetchData() {
-  return domo.post("/sql/v1/" + datasets[0], sqlQuery, { format: "array-of-arrays" })
+  return domo.post("/sql/v1/" + datasets[0], sqlQuery, { contentType: "text/plain" })
     .catch(function () {
       // SQL endpoint not available, fall back to full dataset pull
       setProgress(fetchProgress, "Fetching full dataset (fallback)...");
@@ -109,9 +109,37 @@ function fetchData() {
     });
 }
 
+// Normalize SQL response (array-of-objects) to array-of-arrays format
+function normalizeData(data) {
+  // Already in array-of-arrays format (has .columns and .rows)
+  if (data.columns && data.rows) return data;
+
+  // Array-of-objects format from SQL endpoint
+  if (Array.isArray(data) && data.length > 0) {
+    var columns = Object.keys(data[0]);
+    var rows = [];
+    for (var i = 0; i < data.length; i++) {
+      var row = [];
+      for (var c = 0; c < columns.length; c++) {
+        row.push(data[i][columns[c]]);
+      }
+      rows.push(row);
+    }
+    return { columns: columns, rows: rows };
+  }
+
+  // Empty result
+  if (Array.isArray(data) && data.length === 0) {
+    return { columns: [], rows: [] };
+  }
+
+  return data;
+}
+
 fetchData()
-  .then(function (data) {
+  .then(function (raw) {
     clearInterval(fetchTimer);
+    var data = normalizeData(raw);
     setProgress(75, "Processing " + data.rows.length.toLocaleString() + " rows...");
 
     rawData = data;
