@@ -49,6 +49,17 @@ var loaderText = document.getElementById("loader-text");
 
 loaderText.textContent = "Fetching from Job Financials...";
 
+// Progress bar elements
+var progressBar = document.getElementById("loader-progress-bar");
+var progressPercent = document.getElementById("loader-percent");
+
+function setProgress(pct, label) {
+  var clamped = Math.min(100, Math.max(0, Math.round(pct)));
+  progressBar.style.width = clamped + "%";
+  progressPercent.textContent = clamped + "%";
+  if (label) loaderText.textContent = label;
+}
+
 // Store raw data for drill-down and filtering
 var rawData = null;
 var colIndices = null;
@@ -58,9 +69,19 @@ var currentView = "chart"; // "chart" or "table"
 // Pre-filtered rows (only relevant year/source/category) with cached month keys
 var relevantRows = null;
 
+// Animate progress during fetch (we don't know true progress, so simulate up to 50%)
+var fetchProgress = 0;
+var fetchTimer = setInterval(function () {
+  // Ease toward 50% — fast at first, slows down
+  fetchProgress += (50 - fetchProgress) * 0.08;
+  setProgress(fetchProgress, "Fetching from Job Financials...");
+}, 200);
+
 domo.get(query, { format: "array-of-arrays" })
   .then(function (data) {
-    loaderText.textContent = "Building chart...";
+    clearInterval(fetchTimer);
+    setProgress(50, "Processing " + data.rows.length.toLocaleString() + " rows...");
+
     rawData = data;
     colIndices = {
       month: findCol(data.columns, ["MONTH", "Month", "month"]),
@@ -73,27 +94,55 @@ domo.get(query, { format: "array-of-arrays" })
       opsLead: findCol(data.columns, ["OpsLead", "Ops Lead", "OPS_LEAD"])
     };
 
-    // Pre-filter: keep only rows with valid source and current year, cache monthKey per row
+    // Pre-filter in chunks to allow progress bar updates
     relevantRows = [];
     var cMonth = colIndices.month;
     var cSource = colIndices.source;
-    for (var i = 0; i < data.rows.length; i++) {
-      var row = data.rows[i];
-      var source = row[cSource];
-      if (source !== sourceActual && source !== sourceBudget) continue;
-      var d = parseDate(row[cMonth]);
-      var year = d.getUTCFullYear();
-      if (year !== currentYear) continue;
-      var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
-      // Attach cached monthKey as last element
-      var extended = row.slice();
-      extended._monthKey = year + "-" + mm;
-      relevantRows.push(extended);
+    var total = data.rows.length;
+    var chunkSize = 5000;
+    var idx = 0;
+
+    function processChunk() {
+      var end = Math.min(idx + chunkSize, total);
+      for (var i = idx; i < end; i++) {
+        var row = data.rows[i];
+        var source = row[cSource];
+        if (source !== sourceActual && source !== sourceBudget) continue;
+        var d = parseDate(row[cMonth]);
+        var year = d.getUTCFullYear();
+        if (year !== currentYear) continue;
+        var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
+        var extended = row.slice();
+        extended._monthKey = year + "-" + mm;
+        relevantRows.push(extended);
+      }
+      idx = end;
+
+      // 50-90% for row processing
+      var rowPct = 50 + (idx / total) * 40;
+      setProgress(rowPct, "Processing rows... " + idx.toLocaleString() + " / " + total.toLocaleString());
+
+      if (idx < total) {
+        setTimeout(processChunk, 0);
+      } else {
+        finishLoad();
+      }
     }
 
-    populateFilters(relevantRows, colIndices);
-    refreshView();
-    loader.classList.add("hidden");
+    function finishLoad() {
+      setProgress(92, "Building filters...");
+      setTimeout(function () {
+        populateFilters(relevantRows, colIndices);
+        setProgress(97, "Rendering chart...");
+        setTimeout(function () {
+          refreshView();
+          setProgress(100, "Done");
+          loader.classList.add("hidden");
+        }, 0);
+      }, 0);
+    }
+
+    processChunk();
   });
 
 // ─── Filters ──────────────────────────────────────────────────────────
