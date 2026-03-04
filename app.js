@@ -77,9 +77,11 @@ domo.get(query, { format: "array-of-arrays" })
 // ─── Filters ──────────────────────────────────────────────────────────
 
 var filterRegion = document.getElementById("filter-region");
-var filterJob = document.getElementById("filter-job");
-var filterAccount = document.getElementById("filter-account");
 var filterOps = document.getElementById("filter-ops");
+
+// Search-select instances for Job Number and Parent Account
+var ssJob = null;
+var ssAccount = null;
 
 function populateFilters(data, cols) {
   var regions = {};
@@ -99,13 +101,13 @@ function populateFilters(data, cols) {
   });
 
   fillSelect(filterRegion, Object.keys(regions).sort());
-  fillSelect(filterJob, Object.keys(jobs).sort());
-  fillSelect(filterAccount, Object.keys(accounts).sort());
   fillSelect(filterOps, Object.keys(leads).sort());
+
+  ssJob = initSearchSelect("ss-job", "filter-job", Object.keys(jobs).sort(), refreshView);
+  ssAccount = initSearchSelect("ss-account", "filter-account", Object.keys(accounts).sort(), refreshView);
 }
 
 function fillSelect(el, values) {
-  // Keep existing "All" option, append values
   values.forEach(function (v) {
     var opt = document.createElement("option");
     opt.value = v;
@@ -114,32 +116,203 @@ function fillSelect(el, values) {
   });
 }
 
-// Filter change listeners
-[filterRegion, filterJob, filterAccount, filterOps].forEach(function (el) {
+// ─── Search-Select Widget ─────────────────────────────────────────────
+
+function initSearchSelect(wrapperId, inputId, allValues, onChange) {
+  var wrapper = document.getElementById(wrapperId);
+  var input = document.getElementById(inputId);
+  var dropdown = wrapper.querySelector(".ss-dropdown");
+  var clearBtn = wrapper.querySelector(".ss-clear");
+  var highlightIdx = -1;
+  var selectedValue = "";
+  var visible = [];
+
+  function render(query) {
+    dropdown.innerHTML = "";
+    highlightIdx = -1;
+    var q = (query || "").toLowerCase();
+
+    visible = allValues.filter(function (v) {
+      return !q || v.toLowerCase().indexOf(q) !== -1;
+    });
+
+    if (visible.length === 0) {
+      var noRes = document.createElement("div");
+      noRes.className = "ss-no-results";
+      noRes.textContent = "No matches";
+      dropdown.appendChild(noRes);
+      return;
+    }
+
+    visible.forEach(function (v, i) {
+      var div = document.createElement("div");
+      div.className = "ss-option";
+      div.setAttribute("data-value", v);
+
+      // Highlight matching text
+      if (q) {
+        var lowerV = v.toLowerCase();
+        var matchStart = lowerV.indexOf(q);
+        if (matchStart !== -1) {
+          div.innerHTML = escapeHtml(v.substring(0, matchStart)) +
+            '<span class="ss-match">' + escapeHtml(v.substring(matchStart, matchStart + q.length)) + '</span>' +
+            escapeHtml(v.substring(matchStart + q.length));
+        } else {
+          div.textContent = v;
+        }
+      } else {
+        div.textContent = v;
+      }
+
+      div.addEventListener("mousedown", function (e) {
+        e.preventDefault(); // prevent input blur
+        selectValue(v);
+      });
+
+      dropdown.appendChild(div);
+    });
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement("div");
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  function selectValue(val) {
+    selectedValue = val;
+    input.value = val;
+    dropdown.classList.add("hidden");
+    clearBtn.classList.remove("hidden");
+    onChange();
+  }
+
+  function clearValue() {
+    selectedValue = "";
+    input.value = "";
+    clearBtn.classList.add("hidden");
+    onChange();
+  }
+
+  function showDropdown() {
+    render(input.value);
+    dropdown.classList.remove("hidden");
+  }
+
+  function hideDropdown() {
+    dropdown.classList.add("hidden");
+    highlightIdx = -1;
+  }
+
+  function setHighlight(idx) {
+    var items = dropdown.querySelectorAll(".ss-option");
+    items.forEach(function (el) { el.classList.remove("highlighted"); });
+    if (idx >= 0 && idx < items.length) {
+      items[idx].classList.add("highlighted");
+      items[idx].scrollIntoView({ block: "nearest" });
+    }
+    highlightIdx = idx;
+  }
+
+  input.addEventListener("focus", function () {
+    showDropdown();
+  });
+
+  input.addEventListener("blur", function () {
+    // Small delay so mousedown on option can fire first
+    setTimeout(function () {
+      hideDropdown();
+      // If typed value doesn't match a valid option, revert
+      if (selectedValue && input.value !== selectedValue) {
+        input.value = selectedValue;
+      } else if (!selectedValue) {
+        input.value = "";
+      }
+    }, 150);
+  });
+
+  input.addEventListener("input", function () {
+    selectedValue = ""; // Clear locked selection while typing
+    clearBtn.classList.add("hidden");
+    showDropdown();
+    onChange();
+  });
+
+  input.addEventListener("keydown", function (e) {
+    var items = dropdown.querySelectorAll(".ss-option");
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!dropdown.classList.contains("hidden")) {
+        setHighlight(Math.min(highlightIdx + 1, items.length - 1));
+      } else {
+        showDropdown();
+      }
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight(Math.max(highlightIdx - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (highlightIdx >= 0 && highlightIdx < visible.length) {
+        selectValue(visible[highlightIdx]);
+      }
+    } else if (e.key === "Escape") {
+      hideDropdown();
+      input.blur();
+    }
+  });
+
+  clearBtn.addEventListener("click", function () {
+    clearValue();
+    input.focus();
+  });
+
+  return {
+    getValue: function () { return selectedValue; },
+    clear: function () { clearValue(); }
+  };
+}
+
+// Filter change listeners for regular selects
+[filterRegion, filterOps].forEach(function (el) {
   el.addEventListener("change", refreshView);
 });
 
 document.getElementById("filter-clear").addEventListener("click", function () {
   filterRegion.value = "";
-  filterJob.value = "";
-  filterAccount.value = "";
   filterOps.value = "";
+  if (ssJob) ssJob.clear();
+  if (ssAccount) ssAccount.clear();
   refreshView();
 });
 
 // Apply filters to raw rows
 function getFilteredRows() {
   var rVal = filterRegion.value;
-  var jVal = filterJob.value;
-  var aVal = filterAccount.value;
+  var jVal = ssJob ? ssJob.getValue() : "";
+  var aVal = ssAccount ? ssAccount.getValue() : "";
   var oVal = filterOps.value;
 
-  if (!rVal && !jVal && !aVal && !oVal) return rawData.rows;
+  // Also check partial text input for substring matching
+  var jInput = document.getElementById("filter-job").value;
+  var aInput = document.getElementById("filter-account").value;
+
+  if (!rVal && !jVal && !jInput && !aVal && !aInput && !oVal) return rawData.rows;
 
   return rawData.rows.filter(function (row) {
     if (rVal && row[colIndices.region] !== rVal) return false;
-    if (jVal && row[colIndices.job] !== jVal) return false;
-    if (aVal && row[colIndices.account] !== aVal) return false;
+    // For search-selects: exact match if selected, substring if typing
+    if (jVal) {
+      if (row[colIndices.job] !== jVal) return false;
+    } else if (jInput) {
+      var rowJob = (row[colIndices.job] || "").toLowerCase();
+      if (rowJob.indexOf(jInput.toLowerCase()) === -1) return false;
+    }
+    if (aVal) {
+      if (row[colIndices.account] !== aVal) return false;
+    } else if (aInput) {
+      var rowAcct = (row[colIndices.account] || "").toLowerCase();
+      if (rowAcct.indexOf(aInput.toLowerCase()) === -1) return false;
+    }
     if (oVal && row[colIndices.opsLead] !== oVal) return false;
     return true;
   });

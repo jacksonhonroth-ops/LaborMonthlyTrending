@@ -46,11 +46,19 @@
         </div>
         <div class="filter-group">
           <label for="filter-job">Job Number</label>
-          <select id="filter-job"><option value="">All</option></select>
+          <div class="search-select" id="ss-job">
+            <input type="text" id="filter-job" placeholder="All" autocomplete="off">
+            <span class="ss-clear hidden">&times;</span>
+            <div class="ss-dropdown hidden"></div>
+          </div>
         </div>
         <div class="filter-group">
           <label for="filter-account">Parent Account</label>
-          <select id="filter-account"><option value="">All</option></select>
+          <div class="search-select" id="ss-account">
+            <input type="text" id="filter-account" placeholder="All" autocomplete="off">
+            <span class="ss-clear hidden">&times;</span>
+            <div class="ss-dropdown hidden"></div>
+          </div>
         </div>
         <div class="filter-group">
           <label for="filter-ops">Ops Lead</label>
