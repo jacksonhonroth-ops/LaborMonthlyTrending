@@ -55,48 +55,23 @@ var colIndices = null;
 var chartInstance = null;
 var currentView = "chart"; // "chart" or "table"
 
-// Try simplest possible fetch first — no fields, no format
-console.log("[LaborMOM] Attempting fetch: /data/v1/dataset");
-
-domo.get("/data/v1/dataset")
+domo.get(query, { format: "array-of-arrays" })
   .then(function (data) {
-    console.log("[LaborMOM] SUCCESS! Got data:", typeof data, Array.isArray(data) ? "array len=" + data.length : "");
-    if (data && data.length > 0) {
-      console.log("[LaborMOM] First row keys:", Object.keys(data[0]).join(", "));
-    }
     loaderText.textContent = "Building chart...";
-
-    // Convert object-array to array-of-arrays format
-    if (Array.isArray(data) && data.length > 0 && !data.columns) {
-      var keys = Object.keys(data[0]);
-      var rows = data.map(function (row) {
-        return keys.map(function (k) { return row[k]; });
-      });
-      rawData = { columns: keys, rows: rows };
-    } else {
-      rawData = data;
-    }
-
+    rawData = data;
     colIndices = {
-      month: findCol(rawData.columns, ["MONTH", "Month", "month"]),
-      amount: findCol(rawData.columns, ["Amount", "amount", "AMOUNT"]),
-      category: findCol(rawData.columns, ["PLCategoryName", "P&L Category Name", "P&L_Category_Name"]),
-      source: findCol(rawData.columns, ["SOURCE", "Source", "source"]),
-      region: findCol(rawData.columns, ["Region", "region", "REGION"]),
-      job: findCol(rawData.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
-      account: findCol(rawData.columns, ["ParentAccount", "Parent Account", "PARENT_ACCOUNT"]),
-      opsLead: findCol(rawData.columns, ["OpsLead", "Operations Lead", "Ops Lead", "OPS_LEAD"])
+      month: findCol(data.columns, ["MONTH", "Month", "month"]),
+      amount: findCol(data.columns, ["Amount", "amount", "AMOUNT"]),
+      category: findCol(data.columns, ["PLCategoryName", "P&L Category Name", "P&L_Category_Name"]),
+      source: findCol(data.columns, ["SOURCE", "Source", "source"]),
+      region: findCol(data.columns, ["Region", "region", "REGION"]),
+      job: findCol(data.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
+      account: findCol(data.columns, ["ParentAccount", "Parent Account", "PARENT_ACCOUNT"]),
+      opsLead: findCol(data.columns, ["OpsLead", "Operations Lead", "Ops Lead", "OPS_LEAD"])
     };
-    console.log("[LaborMOM] Column indices:", JSON.stringify(colIndices));
-    populateFilters(rawData, colIndices);
+    populateFilters(data, colIndices);
     refreshView();
     loader.classList.add("hidden");
-  })
-  .catch(function (err) {
-    console.error("[LaborMOM] Fetch failed:", err);
-    console.error("[LaborMOM] Error details:", err.message, err.status, err.statusText);
-    loaderText.textContent = "Data fetch failed (400). Check dataset connection in Design Studio.";
-    loaderText.style.color = "#c0392b";
   });
 
 // ─── Filters ──────────────────────────────────────────────────────────
