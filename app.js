@@ -20,7 +20,7 @@ var sourceBudget = "OPS_FIN_BUDGET";
 var currentYear = 2026;
 
 // Data query for live DOMO data
-var query = "/data/v1/" + datasets[0] + "?fields=" + queryAliases.join();
+var query = "/data/v1/" + datasets[0];
 
 // Find a column index by trying multiple possible names
 function findCol(columns, names) {
@@ -31,12 +31,24 @@ function findCol(columns, names) {
   return -1;
 }
 
-// Parse a DOMO date value to a Date object (handles epoch ms and ISO strings)
-function parseDate(raw) {
-  if (typeof raw === "number") return new Date(raw);
+// Parse a DOMO date value to a month key "YYYY-MM" directly (avoids Date object overhead)
+function parseMonthKey(raw) {
+  if (typeof raw === "number") {
+    var d = new Date(raw);
+    return d.getUTCFullYear() + "-" + ("0" + (d.getUTCMonth() + 1)).slice(-2);
+  }
   var s = String(raw);
-  if (/^\d{10,}$/.test(s)) return new Date(parseInt(s, 10));
-  return new Date(s);
+  // Fast path: ISO "YYYY-MM-DD..." — extract directly without creating Date
+  if (s.length >= 7 && s[4] === "-") {
+    return s.substring(0, 7);
+  }
+  // Numeric string (epoch ms)
+  if (/^\d{10,}$/.test(s)) {
+    var d = new Date(parseInt(s, 10));
+    return d.getUTCFullYear() + "-" + ("0" + (d.getUTCMonth() + 1)).slice(-2);
+  }
+  var d = new Date(s);
+  return d.getUTCFullYear() + "-" + ("0" + (d.getUTCMonth() + 1)).slice(-2);
 }
 
 var monthNames = [
@@ -49,29 +61,131 @@ var loaderText = document.getElementById("loader-text");
 
 loaderText.textContent = "Fetching from Job Financials...";
 
+// Progress bar elements
+var progressBar = document.getElementById("loader-progress-bar");
+var progressPercent = document.getElementById("loader-percent");
+
+function setProgress(pct, label) {
+  var clamped = Math.min(100, Math.max(0, Math.round(pct)));
+  progressBar.style.width = clamped + "%";
+  progressPercent.textContent = clamped + "%";
+  if (label) loaderText.textContent = label;
+}
+
 // Store raw data for drill-down and filtering
 var rawData = null;
 var colIndices = null;
 var chartInstance = null;
 var currentView = "chart"; // "chart" or "table"
 
+// Pre-filtered rows (only relevant year/source/category) with cached month keys
+var relevantRows = null;
+
+// Animate progress during fetch
+var fetchProgress = 0;
+var fetchTimer = setInterval(function () {
+  fetchProgress += (70 - fetchProgress) * 0.06;
+  setProgress(fetchProgress, "Fetching from Job Financials...");
+}, 200);
+
+// ─── Data processing ─────────────────────────────────────────────────
+
+function processData(data) {
+  console.log("[LaborMOM] Columns:", data.columns);
+  console.log("[LaborMOM] Row count:", data.rows ? data.rows.length : 0);
+  setProgress(75, "Processing " + data.rows.length.toLocaleString() + " rows...");
+
+  rawData = data;
+  colIndices = {
+    month: findCol(data.columns, ["MONTH", "Month", "month"]),
+    amount: findCol(data.columns, ["Amount", "amount", "AMOUNT"]),
+    category: findCol(data.columns, ["PLCategoryName", "P&L Category Name", "P&L_Category_Name"]),
+    source: findCol(data.columns, ["SOURCE", "Source", "source"]),
+    region: findCol(data.columns, ["Region", "region", "REGION"]),
+    job: findCol(data.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
+    account: findCol(data.columns, ["ParentAccount", "Parent Account", "PARENT_ACCOUNT"]),
+    opsLead: findCol(data.columns, ["OpsLead", "Ops Lead", "OPS_LEAD"])
+  };
+
+  console.log("[LaborMOM] Column indices:", JSON.stringify(colIndices));
+
+  relevantRows = [];
+  var cMonth = colIndices.month;
+  var cSource = colIndices.source;
+  var total = data.rows.length;
+  var yearPrefix = currentYear + "-";
+
+  for (var i = 0; i < total; i++) {
+    var row = data.rows[i];
+    var source = row[cSource];
+    if (source !== sourceActual && source !== sourceBudget) continue;
+    var mk = parseMonthKey(row[cMonth]);
+    if (mk.substring(0, 5) !== yearPrefix) continue;
+    row._monthKey = mk;
+    relevantRows.push(row);
+  }
+
+  console.log("[LaborMOM] Relevant rows after filtering: " + relevantRows.length);
+  setProgress(85, "Building filters...");
+  populateFilters(relevantRows, colIndices);
+  setProgress(95, "Rendering chart...");
+  refreshView();
+  setProgress(100, "Done");
+  loader.classList.add("hidden");
+}
+
+// Convert array-of-objects response to array-of-arrays format
+function normalizeToArrayOfArrays(objArray) {
+  if (!objArray || objArray.length === 0) {
+    return { columns: [], rows: [] };
+  }
+  var columns = Object.keys(objArray[0]);
+  var rows = [];
+  for (var i = 0; i < objArray.length; i++) {
+    var row = [];
+    for (var c = 0; c < columns.length; c++) {
+      row.push(objArray[i][columns[c]]);
+    }
+    rows.push(row);
+  }
+  return { columns: columns, rows: rows };
+}
+
+// Fetch data — try array-of-arrays first, then default JSON format as fallback
+console.log("[LaborMOM] Starting fetch:", query);
+var fetchStartTime = Date.now();
+
 domo.get(query, { format: "array-of-arrays" })
   .then(function (data) {
-    loaderText.textContent = "Building chart...";
-    rawData = data;
-    colIndices = {
-      month: findCol(data.columns, ["MONTH", "Month", "month"]),
-      amount: findCol(data.columns, ["Amount", "amount", "AMOUNT"]),
-      category: findCol(data.columns, ["PLCategoryName", "P&L Category Name", "P&L_Category_Name"]),
-      source: findCol(data.columns, ["SOURCE", "Source", "source"]),
-      region: findCol(data.columns, ["Region", "region", "REGION"]),
-      job: findCol(data.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
-      account: findCol(data.columns, ["ParentAccount", "Parent Account", "PARENT_ACCOUNT"]),
-      opsLead: findCol(data.columns, ["OpsLead", "Ops Lead", "OPS_LEAD"])
-    };
-    populateFilters(data, colIndices);
-    refreshView();
-    loader.classList.add("hidden");
+    clearInterval(fetchTimer);
+    console.log("[LaborMOM] Fetch (array-of-arrays) succeeded in " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s");
+    processData(data);
+  })
+  .catch(function (err1) {
+    console.warn("[LaborMOM] array-of-arrays failed:", err1, "— trying default format...");
+    setProgress(50, "Retrying with default format...");
+    domo.get(query)
+      .then(function (objData) {
+        clearInterval(fetchTimer);
+        console.log("[LaborMOM] Fetch (default) succeeded in " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s");
+        console.log("[LaborMOM] Got " + (Array.isArray(objData) ? objData.length : "non-array") + " records");
+        if (Array.isArray(objData)) {
+          processData(normalizeToArrayOfArrays(objData));
+        } else {
+          throw new Error("Unexpected response format: " + typeof objData);
+        }
+      })
+      .catch(function (err2) {
+        clearInterval(fetchTimer);
+        console.error("[LaborMOM] Both fetch methods failed.");
+        console.error("[LaborMOM] Error 1 (array-of-arrays):", err1);
+        console.error("[LaborMOM] Error 2 (default):", err2);
+        console.error("[LaborMOM] This usually means the app needs to be republished to DOMO (domo publish).");
+        setProgress(0, "");
+        loaderText.innerHTML = 'Data fetch failed (400).<br><span style="font-size:11px;color:#999">The app may need to be republished — run <code>domo publish</code></span>';
+        loaderText.style.color = "#e74c3c";
+        loaderText.style.textAlign = "center";
+      });
   });
 
 // ─── Filters ──────────────────────────────────────────────────────────
@@ -83,13 +197,14 @@ var filterOps = document.getElementById("filter-ops");
 var ssJob = null;
 var ssAccount = null;
 
-function populateFilters(data, cols) {
+function populateFilters(rows, cols) {
   var regions = {};
   var jobs = {};
   var accounts = {};
   var leads = {};
 
-  data.rows.forEach(function (row) {
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
     var r = row[cols.region];
     var j = row[cols.job];
     var a = row[cols.account];
@@ -98,7 +213,7 @@ function populateFilters(data, cols) {
     if (j) jobs[j] = true;
     if (a) accounts[a] = true;
     if (o) leads[o] = true;
-  });
+  }
 
   fillSelect(filterRegion, Object.keys(regions).sort());
   fillSelect(filterOps, Object.keys(leads).sort());
@@ -144,12 +259,16 @@ function initSearchSelect(wrapperId, inputId, allValues, onChange) {
       return;
     }
 
-    visible.forEach(function (v, i) {
+    // Cap visible items to avoid rendering thousands of DOM nodes
+    var maxItems = 100;
+    var frag = document.createDocumentFragment();
+
+    for (var vi = 0; vi < visible.length && vi < maxItems; vi++) {
+      var v = visible[vi];
       var div = document.createElement("div");
       div.className = "ss-option";
       div.setAttribute("data-value", v);
 
-      // Highlight matching text
       if (q) {
         var lowerV = v.toLowerCase();
         var matchStart = lowerV.indexOf(q);
@@ -165,12 +284,21 @@ function initSearchSelect(wrapperId, inputId, allValues, onChange) {
       }
 
       div.addEventListener("mousedown", function (e) {
-        e.preventDefault(); // prevent input blur
-        selectValue(v);
+        e.preventDefault();
+        selectValue(this.getAttribute("data-value"));
       });
 
-      dropdown.appendChild(div);
-    });
+      frag.appendChild(div);
+    }
+
+    if (visible.length > maxItems) {
+      var more = document.createElement("div");
+      more.className = "ss-no-results";
+      more.textContent = (visible.length - maxItems) + " more — type to narrow";
+      frag.appendChild(more);
+    }
+
+    dropdown.appendChild(frag);
   }
 
   function escapeHtml(str) {
@@ -235,7 +363,6 @@ function initSearchSelect(wrapperId, inputId, allValues, onChange) {
     selectedValue = ""; // Clear locked selection while typing
     clearBtn.classList.add("hidden");
     showDropdown();
-    onChange();
   });
 
   input.addEventListener("keydown", function (e) {
@@ -285,37 +412,30 @@ document.getElementById("filter-clear").addEventListener("click", function () {
   refreshView();
 });
 
-// Apply filters to raw rows
+// Apply filters to pre-filtered relevant rows
 function getFilteredRows() {
   var rVal = filterRegion.value;
   var jVal = ssJob ? ssJob.getValue() : "";
   var aVal = ssAccount ? ssAccount.getValue() : "";
   var oVal = filterOps.value;
 
-  // Also check partial text input for substring matching
-  var jInput = document.getElementById("filter-job").value;
-  var aInput = document.getElementById("filter-account").value;
+  if (!rVal && !jVal && !aVal && !oVal) return relevantRows;
 
-  if (!rVal && !jVal && !jInput && !aVal && !aInput && !oVal) return rawData.rows;
+  var cRegion = colIndices.region;
+  var cJob = colIndices.job;
+  var cAccount = colIndices.account;
+  var cOps = colIndices.opsLead;
+  var result = [];
 
-  return rawData.rows.filter(function (row) {
-    if (rVal && row[colIndices.region] !== rVal) return false;
-    // For search-selects: exact match if selected, substring if typing
-    if (jVal) {
-      if (row[colIndices.job] !== jVal) return false;
-    } else if (jInput) {
-      var rowJob = (row[colIndices.job] || "").toLowerCase();
-      if (rowJob.indexOf(jInput.toLowerCase()) === -1) return false;
-    }
-    if (aVal) {
-      if (row[colIndices.account] !== aVal) return false;
-    } else if (aInput) {
-      var rowAcct = (row[colIndices.account] || "").toLowerCase();
-      if (rowAcct.indexOf(aInput.toLowerCase()) === -1) return false;
-    }
-    if (oVal && row[colIndices.opsLead] !== oVal) return false;
-    return true;
-  });
+  for (var i = 0; i < relevantRows.length; i++) {
+    var row = relevantRows[i];
+    if (rVal && row[cRegion] !== rVal) continue;
+    if (jVal && row[cJob] !== jVal) continue;
+    if (aVal && row[cAccount] !== aVal) continue;
+    if (oVal && row[cOps] !== oVal) continue;
+    result.push(row);
+  }
+  return result;
 }
 
 // ─── View toggle ──────────────────────────────────────────────────────
@@ -348,7 +468,7 @@ btnTable.addEventListener("click", function () {
 // ─── Refresh ──────────────────────────────────────────────────────────
 
 function refreshView() {
-  if (!rawData) return;
+  if (!relevantRows) return;
   var filteredRows = getFilteredRows();
   var processed = aggregateData(filteredRows, colIndices);
 
@@ -364,21 +484,16 @@ function refreshView() {
 function aggregateData(rows, cols) {
   var actual = {};
   var budget = {};
+  var cAmount = cols.amount;
+  var cCategory = cols.category;
+  var cSource = cols.source;
 
-  rows.forEach(function (row) {
-    var monthRaw = row[cols.month];
-    var amount = parseFloat(row[cols.amount]) || 0;
-    var category = row[cols.category];
-    var source = row[cols.source];
-
-    if (source !== sourceActual && source !== sourceBudget) return;
-
-    var d = parseDate(monthRaw);
-    var year = d.getUTCFullYear();
-    if (year !== currentYear) return;
-
-    var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
-    var monthKey = year + "-" + mm;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var amount = parseFloat(row[cAmount]) || 0;
+    var category = row[cCategory];
+    var source = row[cSource];
+    var monthKey = row._monthKey; // cached from pre-filter
 
     var target = (source === sourceActual) ? actual : budget;
     if (!target[monthKey]) {
@@ -390,7 +505,7 @@ function aggregateData(rows, cols) {
     } else if (category === revenueCategory) {
       target[monthKey].revenue += amount;
     }
-  });
+  }
 
   // Merge month keys from both sources
   var allKeys = {};
@@ -454,10 +569,15 @@ function buildChart(data) {
     }
   }
 
-  // Destroy previous chart if exists
+  // Update existing chart data in place if possible (much faster than destroy/recreate)
   if (chartInstance) {
-    chartInstance.destroy();
-    chartInstance = null;
+    chartInstance.data.labels = months;
+    chartInstance.data.datasets[0].data = actualLabor;
+    chartInstance.data.datasets[1].data = budgetLabor;
+    chartInstance.data.datasets[2].data = actualDL;
+    chartInstance.data.datasets[3].data = budgetDL;
+    chartInstance.update();
+    return;
   }
 
   var ctx = document.getElementById("trendChart").getContext("2d");
@@ -791,34 +911,30 @@ function showDrilldown(monthKey) {
   var label = monthNames[monthNum - 1] + " " + parts[0];
   title.textContent = label + " — Labor & Revenue Detail";
 
-  // Filter raw data for this month, applying current filters
+  // Filter pre-filtered rows for this month, applying current filters
   var filteredRows = getFilteredRows();
   var rows = [];
-  filteredRows.forEach(function (row) {
-    var source = row[colIndices.source];
-    if (source !== sourceActual && source !== sourceBudget) return;
+  var cSource = colIndices.source;
+  var cCategory = colIndices.category;
+  var cAmount = colIndices.amount;
 
-    var category = row[colIndices.category];
-    if (laborCategories.indexOf(category) === -1 && category !== revenueCategory) return;
+  for (var i = 0; i < filteredRows.length; i++) {
+    var row = filteredRows[i];
+    if (row._monthKey !== monthKey) continue;
 
-    var d = parseDate(row[colIndices.month]);
-    var year = d.getUTCFullYear();
-    if (year !== currentYear) return;
-
-    var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
-    var key = year + "-" + mm;
-    if (key !== monthKey) return;
+    var category = row[cCategory];
+    if (laborCategories.indexOf(category) === -1 && category !== revenueCategory) continue;
 
     rows.push({
-      source: source,
+      source: row[cSource],
       category: category,
-      amount: parseFloat(row[colIndices.amount]) || 0,
+      amount: parseFloat(row[cAmount]) || 0,
       region: row[colIndices.region] || "",
       job: row[colIndices.job] || "",
       account: row[colIndices.account] || "",
       opsLead: row[colIndices.opsLead] || ""
     });
-  });
+  }
 
   // Aggregate by source + category for a cleaner table
   var agg = {};
