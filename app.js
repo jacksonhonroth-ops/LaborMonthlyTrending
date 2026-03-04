@@ -19,19 +19,9 @@ var sourceBudget = "OPS_FIN_BUDGET";
 // Current year filter
 var currentYear = 2026;
 
-// Build list of all P&L categories we care about
-var allCategories = laborCategories.concat([revenueCategory]);
-var categoryList = allCategories.map(function (c) { return "'" + c + "'"; }).join(", ");
-
-// Data query — use SQL endpoint to filter server-side (much faster than pulling all rows)
-var sqlQuery = "SELECT " + queryAliases.join(", ") +
-  " FROM " + datasets[0] +
-  " WHERE SOURCE IN ('" + sourceActual + "', '" + sourceBudget + "')" +
-  " AND PLCategoryName IN (" + categoryList + ")" +
-  " AND YEAR(MONTH) = " + currentYear;
-
-// Fallback query if SQL endpoint is not available
-var fallbackQuery = "/data/v1/" + datasets[0] + "?fields=" + queryAliases.join();
+// Data query for live DOMO data
+var queryWithFields = "/data/v1/" + datasets[0] + "?fields=" + queryAliases.join();
+var queryWithoutFields = "/data/v1/" + datasets[0];
 
 // Find a column index by trying multiple possible names
 function findCol(columns, names) {
@@ -99,86 +89,34 @@ var fetchTimer = setInterval(function () {
   setProgress(fetchProgress, "Fetching from Job Financials...");
 }, 200);
 
-// Try SQL endpoint first (server-side filtering), fall back to full pull
-console.log("[LaborMOM] SQL query:", sqlQuery);
+// Fetch data — try with field filtering first, fall back to full dataset
 console.log("[LaborMOM] Starting fetch...");
 var fetchStartTime = Date.now();
 
 function fetchData() {
-  // Race SQL call against a timeout — if SQL takes > 10s, fall back
-  var sqlPromise = domo.post("/sql/v1/" + datasets[0], sqlQuery, { contentType: "text/plain" })
+  console.log("[LaborMOM] Trying:", queryWithFields);
+  return domo.get(queryWithFields, { format: "array-of-arrays" })
     .then(function (result) {
-      console.log("[LaborMOM] SQL endpoint succeeded in " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s");
-      console.log("[LaborMOM] SQL result type:", typeof result, Array.isArray(result) ? "(array, length=" + result.length + ")" : "", result && result.rows ? "(has .rows, length=" + result.rows.length + ")" : "");
-      return { source: "sql", data: result };
-    });
-
-  var timeoutPromise = new Promise(function (resolve) {
-    setTimeout(function () {
-      resolve({ source: "timeout" });
-    }, 10000);
-  });
-
-  return Promise.race([sqlPromise, timeoutPromise])
-    .then(function (winner) {
-      if (winner.source === "sql") return winner.data;
-      console.warn("[LaborMOM] SQL timed out after 10s, falling back to /data/v1/");
-      setProgress(fetchProgress, "SQL timed out, fetching full dataset...");
-      return doFallback();
+      console.log("[LaborMOM] Fetch with fields succeeded in " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s, rows:", result.rows ? result.rows.length : "unknown");
+      return result;
     })
     .catch(function (err) {
-      console.warn("[LaborMOM] SQL endpoint failed:", err);
-      setProgress(fetchProgress, "SQL failed, fetching full dataset...");
-      return doFallback();
+      console.warn("[LaborMOM] Fetch with fields failed (400), trying without fields...", err);
+      setProgress(fetchProgress, "Retrying without field filter...");
+      return domo.get(queryWithoutFields, { format: "array-of-arrays" })
+        .then(function (result) {
+          console.log("[LaborMOM] Fetch without fields succeeded in " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s, rows:", result.rows ? result.rows.length : "unknown");
+          return result;
+        });
     });
-}
-
-function doFallback() {
-  var fallbackStart = Date.now();
-  console.log("[LaborMOM] Falling back to:", fallbackQuery);
-  return domo.get(fallbackQuery, { format: "array-of-arrays" })
-    .then(function (result) {
-      console.log("[LaborMOM] Fallback succeeded in " + ((Date.now() - fallbackStart) / 1000).toFixed(1) + "s, rows:", result.rows ? result.rows.length : "unknown");
-      return result;
-    });
-}
-
-// Normalize SQL response (array-of-objects) to array-of-arrays format
-function normalizeData(data) {
-  // Already in array-of-arrays format (has .columns and .rows)
-  if (data.columns && data.rows) return data;
-
-  // Array-of-objects format from SQL endpoint
-  if (Array.isArray(data) && data.length > 0) {
-    var columns = Object.keys(data[0]);
-    var rows = [];
-    for (var i = 0; i < data.length; i++) {
-      var row = [];
-      for (var c = 0; c < columns.length; c++) {
-        row.push(data[i][columns[c]]);
-      }
-      rows.push(row);
-    }
-    return { columns: columns, rows: rows };
-  }
-
-  // Empty result
-  if (Array.isArray(data) && data.length === 0) {
-    return { columns: [], rows: [] };
-  }
-
-  return data;
 }
 
 fetchData()
-  .then(function (raw) {
+  .then(function (data) {
     clearInterval(fetchTimer);
     console.log("[LaborMOM] Total fetch time: " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s");
-    console.log("[LaborMOM] Raw response type:", typeof raw, Array.isArray(raw) ? "array[" + raw.length + "]" : "");
-    if (raw && raw.columns) console.log("[LaborMOM] Columns:", raw.columns);
-    if (raw && raw.rows) console.log("[LaborMOM] Rows:", raw.rows.length);
-    var data = normalizeData(raw);
-    console.log("[LaborMOM] Normalized: " + data.rows.length + " rows, columns:", data.columns);
+    console.log("[LaborMOM] Columns:", data.columns);
+    console.log("[LaborMOM] Row count:", data.rows ? data.rows.length : 0);
     setProgress(75, "Processing " + data.rows.length.toLocaleString() + " rows...");
 
     rawData = data;
@@ -217,6 +155,12 @@ fetchData()
     refreshView();
     setProgress(100, "Done");
     loader.classList.add("hidden");
+  })
+  .catch(function (err) {
+    clearInterval(fetchTimer);
+    console.error("[LaborMOM] Fatal error:", err);
+    setProgress(0, "Error loading data — check console");
+    loaderText.style.color = "#e74c3c";
   });
 
 // ─── Filters ──────────────────────────────────────────────────────────
