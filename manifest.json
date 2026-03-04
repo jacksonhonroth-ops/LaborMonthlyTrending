@@ -2,7 +2,7 @@
    "id": "980d6cca-a620-419f-980c-272d438529b6",
    "name": "MoMLaborTrending",
    "description": "Labor MOM Trending card showing DL % and Labor $ from Job_Financials_wo_JoinV2",
-   "version": "1.0.0",
+   "version": "0.0.1",
    "datasetsMapping": [
       {
          "alias": "dataset",
