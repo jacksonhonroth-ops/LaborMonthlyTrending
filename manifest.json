@@ -2,25 +2,62 @@
    "id": "980d6cca-a620-419f-980c-272d438529b6",
    "name": "MoMLaborTrending",
    "description": "Labor MOM Trending card showing DL % and Labor $ from Job_Financials_wo_JoinV2",
-   "version": "0.0.1",
+   "version": "1.0.0",
    "datasetsMapping": [
       {
          "alias": "dataset",
-         "dataSetId": "fb4c4383-5388-4c32-950c-bada3ed06c5d",
+         "dataSetId": "977fd639-75bb-422c-8773-a26488330bca",
          "fields": [
             {
-               "alias": "Name",
-               "columnName": "Campaign",
+               "alias": "MONTH",
+               "columnName": "MONTH",
                "fieldType": null,
                "beastModeName": null
             },
             {
-               "alias": "Value",
-               "columnName": "Sales",
+               "alias": "Amount",
+               "columnName": "Amount",
+               "fieldType": null,
+               "beastModeName": null
+            },
+            {
+               "alias": "PLCategoryName",
+               "columnName": "P&L Category Name",
+               "fieldType": null,
+               "beastModeName": null
+            },
+            {
+               "alias": "SOURCE",
+               "columnName": "SOURCE",
+               "fieldType": null,
+               "beastModeName": null
+            },
+            {
+               "alias": "Region",
+               "columnName": "Region",
+               "fieldType": null,
+               "beastModeName": null
+            },
+            {
+               "alias": "JobNumber",
+               "columnName": "Job Number",
+               "fieldType": null,
+               "beastModeName": null
+            },
+            {
+               "alias": "ParentAccount",
+               "columnName": "Parent Account",
+               "fieldType": null,
+               "beastModeName": null
+            },
+            {
+               "alias": "OpsLead",
+               "columnName": "Ops Lead",
                "fieldType": null,
                "beastModeName": null
             }
-         ]
+         ],
+         "dql": null
       }
    ],
    "size": {

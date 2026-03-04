@@ -19,8 +19,8 @@ var sourceBudget = "OPS_FIN_BUDGET";
 // Current year filter
 var currentYear = 2026;
 
-// Data query for live DOMO data
-var query = "/data/v1/" + datasets[0];
+// Data query for live DOMO data — use ?fields= with manifest aliases (required by DOMO)
+var query = "/data/v1/" + datasets[0] + "?fields=" + queryAliases.join();
 
 // Find a column index by trying multiple possible names
 function findCol(columns, names) {
