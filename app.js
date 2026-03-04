@@ -31,12 +31,24 @@ function findCol(columns, names) {
   return -1;
 }
 
-// Parse a DOMO date value to a Date object (handles epoch ms and ISO strings)
-function parseDate(raw) {
-  if (typeof raw === "number") return new Date(raw);
+// Parse a DOMO date value to a month key "YYYY-MM" directly (avoids Date object overhead)
+function parseMonthKey(raw) {
+  if (typeof raw === "number") {
+    var d = new Date(raw);
+    return d.getUTCFullYear() + "-" + ("0" + (d.getUTCMonth() + 1)).slice(-2);
+  }
   var s = String(raw);
-  if (/^\d{10,}$/.test(s)) return new Date(parseInt(s, 10));
-  return new Date(s);
+  // Fast path: ISO "YYYY-MM-DD..." — extract directly without creating Date
+  if (s.length >= 7 && s[4] === "-") {
+    return s.substring(0, 7);
+  }
+  // Numeric string (epoch ms)
+  if (/^\d{10,}$/.test(s)) {
+    var d = new Date(parseInt(s, 10));
+    return d.getUTCFullYear() + "-" + ("0" + (d.getUTCMonth() + 1)).slice(-2);
+  }
+  var d = new Date(s);
+  return d.getUTCFullYear() + "-" + ("0" + (d.getUTCMonth() + 1)).slice(-2);
 }
 
 var monthNames = [
@@ -99,22 +111,22 @@ domo.get(query, { format: "array-of-arrays" })
     var cMonth = colIndices.month;
     var cSource = colIndices.source;
     var total = data.rows.length;
-    var chunkSize = 5000;
+    var chunkSize = 20000;
     var idx = 0;
+    var yearPrefix = currentYear + "-";
 
     function processChunk() {
       var end = Math.min(idx + chunkSize, total);
+      var rows = data.rows;
       for (var i = idx; i < end; i++) {
-        var row = data.rows[i];
+        var row = rows[i];
         var source = row[cSource];
         if (source !== sourceActual && source !== sourceBudget) continue;
-        var d = parseDate(row[cMonth]);
-        var year = d.getUTCFullYear();
-        if (year !== currentYear) continue;
-        var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
-        var extended = row.slice();
-        extended._monthKey = year + "-" + mm;
-        relevantRows.push(extended);
+        var mk = parseMonthKey(row[cMonth]);
+        if (mk.substring(0, 5) !== yearPrefix) continue;
+        // Attach monthKey directly to row array (no copy needed)
+        row._monthKey = mk;
+        relevantRows.push(row);
       }
       idx = end;
 
