@@ -1,0 +1,28 @@
+{
+   "name": "NationalPL",
+   "version": "0.0.1",
+   "datasetsMapping": [
+      {
+         "dataSetId": "6c5e3f1b-56c4-4273-98ec-4af164645cfa",
+         "alias": "gl_financials",
+         "fields": [
+            { "alias": "MONTH", "columnName": "MONTH" },
+            { "alias": "Amount", "columnName": "AMOUNT" },
+            { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
+            { "alias": "SOURCE", "columnName": "SOURCE" },
+            { "alias": "Region", "columnName": "Region" },
+            { "alias": "GLAccountNumber", "columnName": "GLAccountNumber" },
+            { "alias": "GLAccountDescription", "columnName": "GL Account Description" },
+            { "alias": "GLPostingDate", "columnName": "GLPostingDate" },
+            { "alias": "MostRecentClosingPeriod", "columnName": "most_recent_closing_period" },
+            { "alias": "Column", "columnName": "Column" },
+            { "alias": "ColumnIndex", "columnName": "Column Index" },
+            { "alias": "Metrics", "columnName": "Metrics" },
+            { "alias": "PLCategories", "columnName": "P&L Categories" },
+            { "alias": "Addback_Type", "columnName": "Addback_Type" }
+         ]
+      }
+   ],
+   "size": { "width": 6, "height": 4 },
+   "fullpage": true
+}
