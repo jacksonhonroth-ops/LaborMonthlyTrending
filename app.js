@@ -19,8 +19,14 @@ var sourceBudget = "OPS_FIN_BUDGET";
 // Current year filter
 var currentYear = 2026;
 
-// Data query for live DOMO data
-var query = "/data/v1/" + datasets[0] + "?fields=" + queryAliases.join();
+// Data query — use SQL endpoint to filter server-side (much faster than pulling all rows)
+var sqlQuery = "SELECT " + queryAliases.join(", ") +
+  " FROM " + datasets[0] +
+  " WHERE SOURCE IN ('" + sourceActual + "', '" + sourceBudget + "')" +
+  " AND YEAR(MONTH) = " + currentYear;
+
+// Fallback query if SQL endpoint is not available
+var fallbackQuery = "/data/v1/" + datasets[0] + "?fields=" + queryAliases.join();
 
 // Find a column index by trying multiple possible names
 function findCol(columns, names) {
@@ -81,18 +87,27 @@ var currentView = "chart"; // "chart" or "table"
 // Pre-filtered rows (only relevant year/source/category) with cached month keys
 var relevantRows = null;
 
-// Animate progress during fetch (we don't know true progress, so simulate up to 50%)
+// Animate progress during fetch
 var fetchProgress = 0;
 var fetchTimer = setInterval(function () {
-  // Ease toward 50% — fast at first, slows down
-  fetchProgress += (50 - fetchProgress) * 0.08;
+  fetchProgress += (70 - fetchProgress) * 0.06;
   setProgress(fetchProgress, "Fetching from Job Financials...");
 }, 200);
 
-domo.get(query, { format: "array-of-arrays" })
+// Try SQL endpoint first (server-side filtering), fall back to full pull
+function fetchData() {
+  return domo.post("/sql/v1/" + datasets[0], sqlQuery, { format: "array-of-arrays" })
+    .catch(function () {
+      // SQL endpoint not available, fall back to full dataset pull
+      setProgress(fetchProgress, "Fetching full dataset (fallback)...");
+      return domo.get(fallbackQuery, { format: "array-of-arrays" });
+    });
+}
+
+fetchData()
   .then(function (data) {
     clearInterval(fetchTimer);
-    setProgress(50, "Processing " + data.rows.length.toLocaleString() + " rows...");
+    setProgress(75, "Processing " + data.rows.length.toLocaleString() + " rows...");
 
     rawData = data;
     colIndices = {
@@ -106,55 +121,30 @@ domo.get(query, { format: "array-of-arrays" })
       opsLead: findCol(data.columns, ["OpsLead", "Ops Lead", "OPS_LEAD"])
     };
 
-    // Pre-filter in chunks to allow progress bar updates
+    // Attach cached monthKey to each row (server already filtered year/source if SQL worked)
     relevantRows = [];
     var cMonth = colIndices.month;
     var cSource = colIndices.source;
     var total = data.rows.length;
-    var chunkSize = 20000;
-    var idx = 0;
     var yearPrefix = currentYear + "-";
 
-    function processChunk() {
-      var end = Math.min(idx + chunkSize, total);
-      var rows = data.rows;
-      for (var i = idx; i < end; i++) {
-        var row = rows[i];
-        var source = row[cSource];
-        if (source !== sourceActual && source !== sourceBudget) continue;
-        var mk = parseMonthKey(row[cMonth]);
-        if (mk.substring(0, 5) !== yearPrefix) continue;
-        // Attach monthKey directly to row array (no copy needed)
-        row._monthKey = mk;
-        relevantRows.push(row);
-      }
-      idx = end;
-
-      // 50-90% for row processing
-      var rowPct = 50 + (idx / total) * 40;
-      setProgress(rowPct, "Processing rows... " + idx.toLocaleString() + " / " + total.toLocaleString());
-
-      if (idx < total) {
-        setTimeout(processChunk, 0);
-      } else {
-        finishLoad();
-      }
+    for (var i = 0; i < total; i++) {
+      var row = data.rows[i];
+      var source = row[cSource];
+      // Guard in case fallback returned unfiltered data
+      if (source !== sourceActual && source !== sourceBudget) continue;
+      var mk = parseMonthKey(row[cMonth]);
+      if (mk.substring(0, 5) !== yearPrefix) continue;
+      row._monthKey = mk;
+      relevantRows.push(row);
     }
 
-    function finishLoad() {
-      setProgress(92, "Building filters...");
-      setTimeout(function () {
-        populateFilters(relevantRows, colIndices);
-        setProgress(97, "Rendering chart...");
-        setTimeout(function () {
-          refreshView();
-          setProgress(100, "Done");
-          loader.classList.add("hidden");
-        }, 0);
-      }, 0);
-    }
-
-    processChunk();
+    setProgress(85, "Building filters...");
+    populateFilters(relevantRows, colIndices);
+    setProgress(95, "Rendering chart...");
+    refreshView();
+    setProgress(100, "Done");
+    loader.classList.add("hidden");
   });
 
 // ─── Filters ──────────────────────────────────────────────────────────
