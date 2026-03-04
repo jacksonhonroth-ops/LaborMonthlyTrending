@@ -19,10 +19,15 @@ var sourceBudget = "OPS_FIN_BUDGET";
 // Current year filter
 var currentYear = 2026;
 
+// Build list of all P&L categories we care about
+var allCategories = laborCategories.concat([revenueCategory]);
+var categoryList = allCategories.map(function (c) { return "'" + c + "'"; }).join(", ");
+
 // Data query — use SQL endpoint to filter server-side (much faster than pulling all rows)
 var sqlQuery = "SELECT " + queryAliases.join(", ") +
   " FROM " + datasets[0] +
   " WHERE SOURCE IN ('" + sourceActual + "', '" + sourceBudget + "')" +
+  " AND PLCategoryName IN (" + categoryList + ")" +
   " AND YEAR(MONTH) = " + currentYear;
 
 // Fallback query if SQL endpoint is not available
