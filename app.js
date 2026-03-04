@@ -100,12 +100,46 @@ var fetchTimer = setInterval(function () {
 }, 200);
 
 // Try SQL endpoint first (server-side filtering), fall back to full pull
+console.log("[LaborMOM] SQL query:", sqlQuery);
+console.log("[LaborMOM] Starting fetch...");
+var fetchStartTime = Date.now();
+
 function fetchData() {
-  return domo.post("/sql/v1/" + datasets[0], sqlQuery, { contentType: "text/plain" })
-    .catch(function () {
-      // SQL endpoint not available, fall back to full dataset pull
-      setProgress(fetchProgress, "Fetching full dataset (fallback)...");
-      return domo.get(fallbackQuery, { format: "array-of-arrays" });
+  // Race SQL call against a timeout — if SQL takes > 10s, fall back
+  var sqlPromise = domo.post("/sql/v1/" + datasets[0], sqlQuery, { contentType: "text/plain" })
+    .then(function (result) {
+      console.log("[LaborMOM] SQL endpoint succeeded in " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s");
+      console.log("[LaborMOM] SQL result type:", typeof result, Array.isArray(result) ? "(array, length=" + result.length + ")" : "", result && result.rows ? "(has .rows, length=" + result.rows.length + ")" : "");
+      return { source: "sql", data: result };
+    });
+
+  var timeoutPromise = new Promise(function (resolve) {
+    setTimeout(function () {
+      resolve({ source: "timeout" });
+    }, 10000);
+  });
+
+  return Promise.race([sqlPromise, timeoutPromise])
+    .then(function (winner) {
+      if (winner.source === "sql") return winner.data;
+      console.warn("[LaborMOM] SQL timed out after 10s, falling back to /data/v1/");
+      setProgress(fetchProgress, "SQL timed out, fetching full dataset...");
+      return doFallback();
+    })
+    .catch(function (err) {
+      console.warn("[LaborMOM] SQL endpoint failed:", err);
+      setProgress(fetchProgress, "SQL failed, fetching full dataset...");
+      return doFallback();
+    });
+}
+
+function doFallback() {
+  var fallbackStart = Date.now();
+  console.log("[LaborMOM] Falling back to:", fallbackQuery);
+  return domo.get(fallbackQuery, { format: "array-of-arrays" })
+    .then(function (result) {
+      console.log("[LaborMOM] Fallback succeeded in " + ((Date.now() - fallbackStart) / 1000).toFixed(1) + "s, rows:", result.rows ? result.rows.length : "unknown");
+      return result;
     });
 }
 
@@ -139,7 +173,12 @@ function normalizeData(data) {
 fetchData()
   .then(function (raw) {
     clearInterval(fetchTimer);
+    console.log("[LaborMOM] Total fetch time: " + ((Date.now() - fetchStartTime) / 1000).toFixed(1) + "s");
+    console.log("[LaborMOM] Raw response type:", typeof raw, Array.isArray(raw) ? "array[" + raw.length + "]" : "");
+    if (raw && raw.columns) console.log("[LaborMOM] Columns:", raw.columns);
+    if (raw && raw.rows) console.log("[LaborMOM] Rows:", raw.rows.length);
     var data = normalizeData(raw);
+    console.log("[LaborMOM] Normalized: " + data.rows.length + " rows, columns:", data.columns);
     setProgress(75, "Processing " + data.rows.length.toLocaleString() + " rows...");
 
     rawData = data;
