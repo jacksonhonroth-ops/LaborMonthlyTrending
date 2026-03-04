@@ -13,7 +13,7 @@
             { "alias": "Region", "columnName": "Region" },
             { "alias": "JobNumber", "columnName": "JobNumber" },
             { "alias": "ParentAccount", "columnName": "Parent Account" },
-            { "alias": "OpsLead", "columnName": "Operations Lead" }
+            { "alias": "OperationsLead", "columnName": "Operations Lead" }
          ]
       }
    ],

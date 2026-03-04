@@ -64,7 +64,7 @@ domo.get(query, { format: "array-of-arrays" })
       region: findCol(data.columns, ["Region", "region", "REGION"]),
       job: findCol(data.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
       account: findCol(data.columns, ["ParentAccount", "Parent Account", "PARENT_ACCOUNT"]),
-      opsLead: findCol(data.columns, ["OpsLead", "Operations Lead", "Ops Lead", "OPS_LEAD"])
+      opsLead: findCol(data.columns, ["OperationsLead", "Operations Lead", "OpsLead", "OPS_LEAD"])
     };
     populateFilters(data, colIndices);
     refreshView();
