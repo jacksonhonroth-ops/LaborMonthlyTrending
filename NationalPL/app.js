@@ -1,7 +1,7 @@
 /* ================================================================
    National P&L – DOMO Phoenix Pro Code Card
    Fetches via /data/v1/dataset?limit=N (ryuu columnar format)
-   SOURCE: GL_FORECAST = forecast, anything else = actuals
+   SOURCE: ACTUAL = actuals, GL_FORECAST = forecast
    ================================================================ */
 (function () {
   'use strict';
@@ -9,40 +9,49 @@
   var DATA_URL = '/data/v1/dataset?limit=500000';
 
   /* ── P&L Structure ──
-     [label, matchKey (null=computed/header), type, sign]
-     type: header | category | subtotal | spacer | pct
-     sign: used for subtotal computation; categories inherit section sign */
+     [label, matchKey, type]
+     type: header | category | subtotal | spacer | pct */
   var PL_ROWS = [
-    ['Revenue',            null,                  'header'],
-    ['Service Revenue',    'Service Revenue',     'category'],
-    ['Total Revenue',      '_totalRevenue',       'subtotal'],
-    [null,                 null,                  'spacer'],
+    ['Revenue',              null,                   'header'],
+    ['Service Revenue',      'Service Revenue',      'category'],
+    ['Total Revenue',        '_totalRevenue',        'subtotal'],
+    [null,                   null,                   'spacer'],
 
-    ['Cost of Goods Sold', null,                  'header'],
-    ['Total Labor',        'Total Labor',         'category'],
-    ['Contract Expenses',  'Contract Expenses',   'category'],
-    ['Supplies & Materials','Supplies & Materials','category'],
-    ['Total COGS',         '_totalCOGS',          'subtotal'],
-    [null,                 null,                  'spacer'],
+    ['Cost of Goods Sold',   null,                   'header'],
+    ['Total Labor',          'Total Labor',          'category'],
+    ['Contract Expenses',    'Contract Expenses',    'category'],
+    ['Supplies & Materials', 'Supplies & Materials', 'category'],
+    ['Total COGS',           '_totalCOGS',           'subtotal'],
+    [null,                   null,                   'spacer'],
 
-    ['Gross Profit',       '_grossProfit',        'subtotal'],
-    ['GP %',               '_gpPct',              'pct'],
-    [null,                 null,                  'spacer'],
+    ['Gross Profit',         '_grossProfit',         'subtotal'],
+    ['GP %',                 '_gpPct',               'pct'],
+    [null,                   null,                   'spacer'],
 
-    ['Operating Expenses', null,                  'header'],
-    ['Field Overhead',     'Field Overhead',      'category'],
-    ['Benefits & Taxes',   'Benefits & Taxes',    'category'],
-    ['Total OpEx',         '_totalOpEx',          'subtotal'],
-    [null,                 null,                  'spacer'],
+    ['Operating Expenses',   null,                   'header'],
+    ['Field Overhead',       'Field Overhead',       'category'],
+    ['HQ Overhead',          'HQ Overhead',          'category'],
+    ['Sales Overhead',       'Sales Overhead',       'category'],
+    ['Benefits & Taxes',     'Benefits & Taxes',     'category'],
+    ['Total OpEx',           '_totalOpEx',           'subtotal'],
+    [null,                   null,                   'spacer'],
 
-    ['Net Income',         '_netIncome',          'subtotal'],
-    ['NI %',               '_niPct',              'pct']
+    ['Other Income/Expense', null,                   'header'],
+    ['Control Account',      'Control Account',      'category'],
+    ['Income Taxes',         'Income Taxes',         'category'],
+    ['Other Income/ Expense','Other Income/ Expense','category'],
+    ['Total Other',          '_totalOther',          'subtotal'],
+    [null,                   null,                   'spacer'],
+
+    ['Net Income',           '_netIncome',           'subtotal'],
+    ['NI %',                 '_niPct',               'pct']
   ];
 
-  /* Categories that belong to each subtotal */
-  var REVENUE_CATS = ['Service Revenue'];
-  var COGS_CATS = ['Total Labor', 'Contract Expenses', 'Supplies & Materials'];
-  var OPEX_CATS = ['Field Overhead', 'Benefits & Taxes'];
+  /* Categories for each subtotal */
+  var REVENUE_CATS  = ['Service Revenue'];
+  var COGS_CATS     = ['Total Labor', 'Contract Expenses', 'Supplies & Materials'];
+  var OPEX_CATS     = ['Field Overhead', 'HQ Overhead', 'Sales Overhead', 'Benefits & Taxes'];
+  var OTHER_CATS    = ['Control Account', 'Income Taxes', 'Other Income/ Expense'];
 
   /* ── Formatting ── */
   function fmt(val) {
@@ -101,10 +110,10 @@
     var cols = resp.columns;
     var rows = resp.rows;
 
-    var iMonth = cols.indexOf('MONTH');
+    var iMonth  = cols.indexOf('MONTH');
     var iAmount = cols.indexOf('AMOUNT');
     var iSource = cols.indexOf('SOURCE');
-    var iCat = cols.indexOf('P&L Category Name');
+    var iCat    = cols.indexOf('P&L Category Name');
     if (iCat === -1) iCat = cols.indexOf('PLCategoryName');
     if (iAmount === -1) iAmount = cols.indexOf('Amount');
 
@@ -113,63 +122,59 @@
       return;
     }
 
-    /* Quick diagnostic: show unique SOURCE values and categories */
-    var uniqueSources = {};
-    var uniqueCats = {};
-    for (var d = 0; d < rows.length; d++) {
-      var sv = iSource >= 0 ? (rows[d][iSource] || '(empty)') : '(no col)';
-      uniqueSources[sv] = (uniqueSources[sv] || 0) + 1;
-      var cv = rows[d][iCat] || '(empty)';
-      uniqueCats[cv] = true;
-    }
-    var diagEl = document.createElement('div');
-    diagEl.style.cssText = 'font-size:10px;font-family:monospace;padding:4px 8px;background:#f0f0f0;margin-bottom:4px;max-height:60px;overflow:auto;';
-    diagEl.textContent = 'SOURCES: ' + Object.keys(uniqueSources).map(function(k){ return k+'('+uniqueSources[k]+')'; }).join(', ') +
-      ' | CATEGORIES: ' + Object.keys(uniqueCats).sort().join(', ');
-    document.getElementById('card-wrapper').insertBefore(diagEl, document.getElementById('table-wrapper'));
-
     /* Separate actuals and forecast into different buckets */
-    var actData = {};   // { cat: { mk: sum } }
-    var fcstData = {};  // { cat: { mk: sum } }
+    var actData  = {};   // { cat: { mk: sum } }
+    var fcstData = {};   // { cat: { mk: sum } }
     var monthSet = {};
-    var monthHasActuals = {};  // { mk: true } if any actual row exists
+    var monthActCount  = {};  // { mk: number of ACTUAL rows }
+    var monthFcstCount = {};  // { mk: number of GL_FORECAST rows }
 
     for (var r = 0; r < rows.length; r++) {
       var row = rows[r];
       var cat = row[iCat];
       var rawMonth = row[iMonth];
       var amt = parseFloat(row[iAmount]) || 0;
-      var src = iSource >= 0 ? (row[iSource] || '').trim() : '';
+      var src = iSource >= 0 ? (row[iSource] || '').trim().toUpperCase() : '';
 
       if (!cat || !rawMonth) continue;
 
       var mk = rawMonth.substring(0, 7);
+      if (mk.substring(0, 4) !== '2026') continue; // Filter to 2026 only
+
       monthSet[mk] = true;
 
-      var isForecast = src.toUpperCase().indexOf('FORECAST') >= 0;
+      var isActual = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS');
 
-      if (isForecast) {
-        if (!fcstData[cat]) fcstData[cat] = {};
-        fcstData[cat][mk] = (fcstData[cat][mk] || 0) + amt;
-      } else {
+      if (isActual) {
         if (!actData[cat]) actData[cat] = {};
         actData[cat][mk] = (actData[cat][mk] || 0) + amt;
-        monthHasActuals[mk] = true;
+        monthActCount[mk] = (monthActCount[mk] || 0) + 1;
+      } else {
+        if (!fcstData[cat]) fcstData[cat] = {};
+        fcstData[cat][mk] = (fcstData[cat][mk] || 0) + amt;
+        monthFcstCount[mk] = (monthFcstCount[mk] || 0) + 1;
       }
     }
 
-    var months = Object.keys(monthSet).filter(function (mk) {
-      return mk.substring(0, 4) === '2026';
-    }).sort();
+    var months = Object.keys(monthSet).sort();
 
-    /* For each month: use actuals if available, else forecast */
+    /* Diagnostic: show per-month source breakdown */
+    var diagParts = months.map(function (mk) {
+      return monthLabel(mk) + ':A' + (monthActCount[mk]||0) + '/F' + (monthFcstCount[mk]||0);
+    });
+    var diagEl = document.createElement('div');
+    diagEl.style.cssText = 'font-size:9px;font-family:monospace;padding:2px 8px;background:#f0f0f0;margin-bottom:2px;overflow:auto;white-space:nowrap;';
+    diagEl.textContent = diagParts.join(' | ');
+    document.getElementById('card-wrapper').insertBefore(diagEl, document.getElementById('table-wrapper'));
+
+    /* For each month: use ACT if actuals exist, else FCST */
     var monthType = {};
     months.forEach(function (mk) {
-      monthType[mk] = monthHasActuals[mk] ? 'ACT' : 'FCST';
+      monthType[mk] = monthActCount[mk] ? 'ACT' : 'FCST';
     });
 
     /* Merged data: pick actuals or forecast per month */
-    var merged = {};  // { cat: { mk: value } }
+    var merged = {};
     var allCats = {};
     [actData, fcstData].forEach(function (d) {
       for (var cat in d) allCats[cat] = true;
@@ -196,47 +201,40 @@
     }
 
     var computed = {};
-    months.forEach(function (mk) {
-      var rev = sumCats(REVENUE_CATS, mk);
-      var cogs = sumCats(COGS_CATS, mk);
-      var opex = sumCats(OPEX_CATS, mk);
-      var gp = rev - cogs;
-      var ni = gp - opex;
+    var compKeys = ['_totalRevenue','_totalCOGS','_grossProfit','_gpPct','_totalOpEx','_totalOther','_netIncome','_niPct'];
+    compKeys.forEach(function (k) { computed[k] = {}; });
 
-      if (!computed['_totalRevenue']) computed['_totalRevenue'] = {};
-      if (!computed['_totalCOGS']) computed['_totalCOGS'] = {};
-      if (!computed['_grossProfit']) computed['_grossProfit'] = {};
-      if (!computed['_gpPct']) computed['_gpPct'] = {};
-      if (!computed['_totalOpEx']) computed['_totalOpEx'] = {};
-      if (!computed['_netIncome']) computed['_netIncome'] = {};
-      if (!computed['_niPct']) computed['_niPct'] = {};
+    months.forEach(function (mk) {
+      var rev   = sumCats(REVENUE_CATS, mk);
+      var cogs  = sumCats(COGS_CATS, mk);
+      var opex  = sumCats(OPEX_CATS, mk);
+      var other = sumCats(OTHER_CATS, mk);
+      var gp    = rev - cogs;
+      var ni    = gp - opex - other;
 
       computed['_totalRevenue'][mk] = rev;
-      computed['_totalCOGS'][mk] = cogs;
-      computed['_grossProfit'][mk] = gp;
-      computed['_gpPct'][mk] = rev !== 0 ? gp / rev : 0;
-      computed['_totalOpEx'][mk] = opex;
-      computed['_netIncome'][mk] = ni;
-      computed['_niPct'][mk] = rev !== 0 ? ni / rev : 0;
+      computed['_totalCOGS'][mk]    = cogs;
+      computed['_grossProfit'][mk]  = gp;
+      computed['_gpPct'][mk]        = rev !== 0 ? gp / rev : 0;
+      computed['_totalOpEx'][mk]    = opex;
+      computed['_totalOther'][mk]   = other;
+      computed['_netIncome'][mk]    = ni;
+      computed['_niPct'][mk]        = rev !== 0 ? ni / rev : 0;
     });
 
-    /* Add any categories not in PL_ROWS to an "Other" section */
+    /* Check for any categories not in our P&L structure */
     var knownCats = {};
     PL_ROWS.forEach(function (r) { if (r[1] && r[1][0] !== '_') knownCats[r[1]] = true; });
-    var extraCats = Object.keys(allCats).filter(function (c) { return !knownCats[c]; }).sort();
+    var extraCats = Object.keys(allCats).filter(function (c) { return !knownCats[c] && c; }).sort();
 
     var displayRows = PL_ROWS.slice();
     if (extraCats.length > 0) {
-      // Insert extra categories before Net Income
       var niIdx = displayRows.findIndex(function (r) { return r[1] === '_netIncome'; });
-      var extras = [[null, null, 'spacer'], ['Other', null, 'header']];
-      extraCats.forEach(function (c) {
-        extras.push([c, c, 'category']);
+      displayRows.splice(niIdx, 0, [null, null, 'spacer'], ['Unclassified', null, 'header']);
+      niIdx += 2;
+      extraCats.forEach(function (c, i) {
+        displayRows.splice(niIdx + i, 0, [c, c, 'category']);
       });
-      displayRows.splice(niIdx, 0, extras[0], extras[1]);
-      for (var x = 2; x < extras.length; x++) {
-        displayRows.splice(niIdx + x, 0, extras[x]);
-      }
     }
 
     renderTable(displayRows, months, monthType, merged, computed);
@@ -298,8 +296,8 @@
     /* Body */
     displayRows.forEach(function (def) {
       var label = def[0];
-      var key = def[1];
-      var type = def[2];
+      var key   = def[1];
+      var type  = def[2];
 
       var tr = document.createElement('tr');
       tr.className = 'row-' + type;
