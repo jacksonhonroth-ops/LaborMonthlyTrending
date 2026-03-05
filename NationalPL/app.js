@@ -67,7 +67,13 @@ var PL_ROWS = [
 ];
 
 // ── INIT ────────────────────────────────────────────────────────
-fetchData();
+// In DOMO Pro Code, domo.js may load async. Wait for it.
+function waitForDomo(cb, retries) {
+  if (typeof domo !== 'undefined') { cb(); return; }
+  if (retries <= 0) { showError('domo.js did not load. Check manifest.json and dataset mapping.'); return; }
+  setTimeout(function() { waitForDomo(cb, retries - 1); }, 200);
+}
+waitForDomo(fetchData, 25);
 
 function fetchData() {
   domo.get('/data/v1/' + DATASET + '?limit=100000', { format: 'array-of-arrays' })
