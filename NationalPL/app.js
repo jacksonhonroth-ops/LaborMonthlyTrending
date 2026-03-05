@@ -1,7 +1,7 @@
-/* Debug v7: use RYUU auth token for data fetch */
+/* Debug v8: try DOMO main API directly */
 (function () {
   var out = document.getElementById('loader');
-  out.innerHTML = '<p style="font-weight:bold">Debug v7 - authenticated fetch</p>';
+  out.innerHTML = '<p style="font-weight:bold">Debug v8 - direct DOMO API</p>';
 
   function log(msg) {
     console.log(msg);
@@ -12,9 +12,11 @@
   }
 
   var token = window.__RYUU_AUTHENTICATION_TOKEN__;
-  var sid = window.__RYUU_SID__;
-  log('Token: ' + (token ? token.substring(0, 50) + '...' : 'MISSING'));
-  log('SID: ' + (sid || 'MISSING'));
+  var params = new URLSearchParams(window.location.search);
+  var customer = params.get('customer') || params.get('USER_GROUP');
+  log('Customer/instance: ' + customer);
+
+  var datasetId = '6c5e3f1b-56c4-4273-98ec-4af164645cfa';
 
   function tryXHR(label, url, headers) {
     return new Promise(function (resolve) {
@@ -23,70 +25,84 @@
       xhr.open('GET', url, true);
       if (headers) {
         for (var k in headers) {
-          xhr.setRequestHeader(k, headers[k]);
+          try { xhr.setRequestHeader(k, headers[k]); } catch(e) { log('  header error: ' + e.message); }
         }
       }
-      xhr.timeout = 8000;
+      xhr.timeout = 6000;
       xhr.onload = function () {
         log(label + ' status: ' + xhr.status);
-        log(label + ' response length: ' + (xhr.responseText || '').length);
-        log(label + ' body (first 500): ' + (xhr.responseText || '').substring(0, 500));
-        if (xhr.responseText) {
+        var body = (xhr.responseText || '').substring(0, 400);
+        log(label + ' body: ' + body);
+        if (xhr.status === 200 && xhr.responseText) {
           try {
             var data = JSON.parse(xhr.responseText);
             if (Array.isArray(data)) {
-              log(label + ': ARRAY of ' + data.length + ' rows');
-              if (data.length > 0) {
-                log(label + ' keys: ' + Object.keys(data[0]).join(', '));
-                log(label + ' row[0]: ' + JSON.stringify(data[0]).substring(0, 300));
-              }
+              log(label + ': SUCCESS! Array of ' + data.length + ' rows');
+              if (data.length > 0) log(label + ' keys: ' + Object.keys(data[0]).join(', '));
+              if (data.length > 0) log(label + ' row0: ' + JSON.stringify(data[0]).substring(0, 300));
             } else {
-              log(label + ': OBJECT keys: ' + Object.keys(data).join(', '));
+              log(label + ': object keys=' + Object.keys(data).join(', '));
             }
-          } catch (e) {
-            log(label + ' not JSON');
-          }
+          } catch(e) {}
         }
         resolve();
       };
-      xhr.onerror = function () { log(label + ' XHR error'); resolve(); };
-      xhr.ontimeout = function () { log(label + ' XHR timeout (8s)'); resolve(); };
+      xhr.onerror = function () { log(label + ' error (CORS?)'); resolve(); };
+      xhr.ontimeout = function () { log(label + ' timeout'); resolve(); };
       xhr.send();
     });
   }
 
-  // Try various auth header patterns
-  tryXHR('bearer', '/data/v1/dataset', {
-    'Authorization': 'Bearer ' + token
-  })
+  var domoBase = 'https://' + customer + '.domo.com';
+  log('DOMO base: ' + domoBase);
+
+  // Try paths on the app's own domain first (non /data/v1/)
+  tryXHR('app-root', '/', {})
   .then(function () {
-    return tryXHR('x-domo-auth', '/data/v1/dataset', {
-      'x-domo-authentication': token
-    });
-  })
-  .then(function () {
-    return tryXHR('x-domo-auth+accept', '/data/v1/dataset', {
+    return tryXHR('app-api', '/api/data/v1/' + datasetId, {
       'x-domo-authentication': token,
       'Accept': 'application/json'
     });
   })
   .then(function () {
-    return tryXHR('ryuu-token', '/data/v1/dataset', {
-      'x-ryuu-token': token
-    });
-  })
-  .then(function () {
-    return tryXHR('cookie-sid', '/data/v1/dataset', {
-      'x-domo-authentication': token,
-      'x-ryuu-sid': sid
-    });
-  })
-  .then(function () {
-    // Also try SQL query with auth
-    var sql = encodeURIComponent('SELECT * FROM dataset LIMIT 3');
-    return tryXHR('sql+auth', '/data/v1/dataset?query=' + sql, {
+    // Try DOMO main instance
+    return tryXHR('domo-query', domoBase + '/api/query/v1/execute/' + datasetId, {
       'x-domo-authentication': token,
       'Accept': 'application/json'
+    });
+  })
+  .then(function () {
+    return tryXHR('domo-data', domoBase + '/api/data/v1/' + datasetId + '?includeHeader=true&limit=5', {
+      'x-domo-authentication': token,
+      'Accept': 'application/json'
+    });
+  })
+  .then(function () {
+    return tryXHR('domo-sql', domoBase + '/sql/v1/' + datasetId, {
+      'x-domo-authentication': token,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    });
+  })
+  .then(function () {
+    // Try without custom headers (rely on cookies)
+    return tryXHR('domo-data-nocreds', domoBase + '/api/data/v1/' + datasetId + '?includeHeader=true&limit=5', {
+      'Accept': 'application/json'
+    });
+  })
+  .then(function () {
+    // Try fetch with credentials: include to send cookies cross-origin
+    log('--- fetch-with-cookies ---');
+    return fetch(domoBase + '/api/data/v1/' + datasetId + '?includeHeader=true&limit=5', {
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' }
+    }).then(function (r) {
+      log('fetch-with-cookies status: ' + r.status);
+      return r.text();
+    }).then(function (t) {
+      log('fetch-with-cookies body: ' + t.substring(0, 400));
+    }).catch(function (e) {
+      log('fetch-with-cookies error: ' + e.message);
     });
   })
   .then(function () {
