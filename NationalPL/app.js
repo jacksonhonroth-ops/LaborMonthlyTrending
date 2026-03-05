@@ -1,7 +1,7 @@
-/* Debug v9: find the correct ryuu API path */
+/* Debug v10: dig into /data/v1/{uuid} which returns 400 */
 (function () {
   var out = document.getElementById('loader');
-  out.innerHTML = '<p style="font-weight:bold">Debug v9 - find ryuu data path</p>';
+  out.innerHTML = '<p style="font-weight:bold">Debug v10 - /data/v1/{uuid} deep probe</p>';
 
   function log(msg) {
     console.log(msg);
@@ -13,88 +13,105 @@
 
   var token = window.__RYUU_AUTHENTICATION_TOKEN__;
   var dsId = '6c5e3f1b-56c4-4273-98ec-4af164645cfa';
-  var headers = {
-    'x-domo-authentication': token,
-    'Accept': 'application/json'
-  };
+  var base = '/data/v1/' + dsId;
 
-  function tryXHR(label, url) {
+  function tryReq(label, method, url, hdrs, body) {
     return new Promise(function (resolve) {
       var xhr = new XMLHttpRequest();
-      xhr.open('GET', url, true);
-      for (var k in headers) { try { xhr.setRequestHeader(k, headers[k]); } catch(e){} }
-      xhr.timeout = 5000;
+      xhr.open(method, url, true);
+      if (hdrs) {
+        for (var k in hdrs) { try { xhr.setRequestHeader(k, hdrs[k]); } catch(e){} }
+      }
+      xhr.timeout = 6000;
       xhr.onload = function () {
-        var status = xhr.status;
-        var body = (xhr.responseText || '').substring(0, 200);
-        var marker = status === 200 ? 'OK' : status === 404 ? '404' : status;
-        log(marker + ' ' + label + ' → ' + url);
-        if (status === 200) {
-          log('  BODY: ' + body);
-          try {
-            var data = JSON.parse(xhr.responseText);
-            if (Array.isArray(data)) {
-              log('  ARRAY of ' + data.length + ' rows!');
-              if (data.length > 0) {
-                log('  KEYS: ' + Object.keys(data[0]).join(', '));
-                log('  ROW0: ' + JSON.stringify(data[0]).substring(0, 300));
-              }
-            } else {
-              log('  OBJ KEYS: ' + Object.keys(data).join(', '));
-            }
-          } catch(e) {}
-        }
-        resolve();
+        log(xhr.status + ' [' + method + '] ' + label);
+        log('  → ' + (xhr.responseText || '').substring(0, 400));
+        resolve(xhr);
       };
-      xhr.onerror = function () { log('ERR ' + label); resolve(); };
-      xhr.ontimeout = function () { log('TMO ' + label); resolve(); };
-      xhr.send();
+      xhr.onerror = function () { log('ERR ' + label); resolve(null); };
+      xhr.ontimeout = function () { log('TMO ' + label); resolve(null); };
+      xhr.send(body || null);
     });
   }
 
-  // Systematic path exploration
-  var paths = [
-    // /api/ prefix variations
-    '/api/data/v1/dataset',
-    '/api/data/v1/' + dsId,
-    '/api/v1/data/dataset',
-    '/api/v1/dataset',
-    '/api/dataset',
-    '/api/query/v1/execute/' + dsId,
-    // /domo/ prefix
-    '/domo/data/v1/dataset',
-    '/domo/data/v1/' + dsId,
-    // direct /data/ with auth (retry - maybe auth makes it work)
-    '/data/v1/dataset',
-    '/data/v1/' + dsId,
-    '/data/v2/dataset',
-    // /sql/ prefix
-    '/sql/v1/' + dsId,
-    // Other common patterns
-    '/datasets/' + dsId + '/data',
-    '/datasets/dataset/data',
-    '/v1/datasets/' + dsId + '/data',
-    // Phoenix brick patterns
-    '/phoenix/data/dataset',
-    '/brick/data/dataset',
-    // Check what paths exist
-    '/api',
-    '/api/',
-    '/api/v1',
-  ];
-
-  var i = 0;
-  function next() {
-    if (i >= paths.length) {
-      log('=== DONE: tested ' + paths.length + ' paths ===');
-      return;
-    }
-    tryXHR('path' + i, paths[i]).then(function () {
-      i++;
-      next();
+  // First: see what the 400 error body says
+  tryReq('bare GET', 'GET', base, {})
+  .then(function () {
+    // Add auth
+    return tryReq('GET+auth', 'GET', base, {
+      'x-domo-authentication': token
     });
-  }
-
-  log('Testing ' + paths.length + ' path variations...');
-  next();
+  })
+  .then(function () {
+    return tryReq('GET+auth+json', 'GET', base, {
+      'x-domo-authentication': token,
+      'Accept': 'application/json'
+    });
+  })
+  .then(function () {
+    return tryReq('GET+bearer', 'GET', base, {
+      'Authorization': 'Bearer ' + token
+    });
+  })
+  .then(function () {
+    // Try with query params
+    return tryReq('GET+auth+limit', 'GET', base + '?limit=5', {
+      'x-domo-authentication': token,
+      'Accept': 'application/json'
+    });
+  })
+  .then(function () {
+    // Try with SQL
+    var sql = encodeURIComponent('SELECT * LIMIT 5');
+    return tryReq('GET+auth+sql', 'GET', base + '?query=' + sql, {
+      'x-domo-authentication': token,
+      'Accept': 'application/json'
+    });
+  })
+  .then(function () {
+    // Try POST
+    return tryReq('POST+auth', 'POST', base, {
+      'x-domo-authentication': token,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    }, JSON.stringify({ query: 'SELECT * LIMIT 5' }));
+  })
+  .then(function () {
+    // Try POST with SQL body
+    return tryReq('POST+sql-text', 'POST', base, {
+      'x-domo-authentication': token,
+      'Content-Type': 'text/plain',
+      'Accept': 'application/json'
+    }, 'SELECT * LIMIT 5');
+  })
+  .then(function () {
+    // Try with includeHeader
+    return tryReq('GET+includeHeader', 'GET', base + '?includeHeader=true&limit=5', {
+      'x-domo-authentication': token,
+      'Accept': 'text/csv'
+    });
+  })
+  .then(function () {
+    // Try text/csv accept
+    return tryReq('GET+csv', 'GET', base, {
+      'x-domo-authentication': token,
+      'Accept': 'text/csv'
+    });
+  })
+  .then(function () {
+    // Try Accept: */*
+    return tryReq('GET+star', 'GET', base, {
+      'x-domo-authentication': token,
+      'Accept': '*/*'
+    });
+  })
+  .then(function () {
+    // Try no Accept header at all, just auth
+    return tryReq('GET+auth-only', 'GET', base, {
+      'x-domo-authentication': token
+    });
+  })
+  .then(function () {
+    log('=== DONE ===');
+  });
 })();
