@@ -113,6 +113,21 @@
       return;
     }
 
+    /* Quick diagnostic: show unique SOURCE values and categories */
+    var uniqueSources = {};
+    var uniqueCats = {};
+    for (var d = 0; d < rows.length; d++) {
+      var sv = iSource >= 0 ? (rows[d][iSource] || '(empty)') : '(no col)';
+      uniqueSources[sv] = (uniqueSources[sv] || 0) + 1;
+      var cv = rows[d][iCat] || '(empty)';
+      uniqueCats[cv] = true;
+    }
+    var diagEl = document.createElement('div');
+    diagEl.style.cssText = 'font-size:10px;font-family:monospace;padding:4px 8px;background:#f0f0f0;margin-bottom:4px;max-height:60px;overflow:auto;';
+    diagEl.textContent = 'SOURCES: ' + Object.keys(uniqueSources).map(function(k){ return k+'('+uniqueSources[k]+')'; }).join(', ') +
+      ' | CATEGORIES: ' + Object.keys(uniqueCats).sort().join(', ');
+    document.getElementById('card-wrapper').insertBefore(diagEl, document.getElementById('table-wrapper'));
+
     /* Separate actuals and forecast into different buckets */
     var actData = {};   // { cat: { mk: sum } }
     var fcstData = {};  // { cat: { mk: sum } }
