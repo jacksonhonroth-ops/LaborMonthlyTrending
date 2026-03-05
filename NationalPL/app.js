@@ -1,7 +1,7 @@
-/* Debug v8: try DOMO main API directly */
+/* Debug v9: find the correct ryuu API path */
 (function () {
   var out = document.getElementById('loader');
-  out.innerHTML = '<p style="font-weight:bold">Debug v8 - direct DOMO API</p>';
+  out.innerHTML = '<p style="font-weight:bold">Debug v9 - find ryuu data path</p>';
 
   function log(msg) {
     console.log(msg);
@@ -12,100 +12,89 @@
   }
 
   var token = window.__RYUU_AUTHENTICATION_TOKEN__;
-  var params = new URLSearchParams(window.location.search);
-  var customer = params.get('customer') || params.get('USER_GROUP');
-  log('Customer/instance: ' + customer);
+  var dsId = '6c5e3f1b-56c4-4273-98ec-4af164645cfa';
+  var headers = {
+    'x-domo-authentication': token,
+    'Accept': 'application/json'
+  };
 
-  var datasetId = '6c5e3f1b-56c4-4273-98ec-4af164645cfa';
-
-  function tryXHR(label, url, headers) {
+  function tryXHR(label, url) {
     return new Promise(function (resolve) {
-      log('--- ' + label + ' ---');
       var xhr = new XMLHttpRequest();
       xhr.open('GET', url, true);
-      if (headers) {
-        for (var k in headers) {
-          try { xhr.setRequestHeader(k, headers[k]); } catch(e) { log('  header error: ' + e.message); }
-        }
-      }
-      xhr.timeout = 6000;
+      for (var k in headers) { try { xhr.setRequestHeader(k, headers[k]); } catch(e){} }
+      xhr.timeout = 5000;
       xhr.onload = function () {
-        log(label + ' status: ' + xhr.status);
-        var body = (xhr.responseText || '').substring(0, 400);
-        log(label + ' body: ' + body);
-        if (xhr.status === 200 && xhr.responseText) {
+        var status = xhr.status;
+        var body = (xhr.responseText || '').substring(0, 200);
+        var marker = status === 200 ? 'OK' : status === 404 ? '404' : status;
+        log(marker + ' ' + label + ' → ' + url);
+        if (status === 200) {
+          log('  BODY: ' + body);
           try {
             var data = JSON.parse(xhr.responseText);
             if (Array.isArray(data)) {
-              log(label + ': SUCCESS! Array of ' + data.length + ' rows');
-              if (data.length > 0) log(label + ' keys: ' + Object.keys(data[0]).join(', '));
-              if (data.length > 0) log(label + ' row0: ' + JSON.stringify(data[0]).substring(0, 300));
+              log('  ARRAY of ' + data.length + ' rows!');
+              if (data.length > 0) {
+                log('  KEYS: ' + Object.keys(data[0]).join(', '));
+                log('  ROW0: ' + JSON.stringify(data[0]).substring(0, 300));
+              }
             } else {
-              log(label + ': object keys=' + Object.keys(data).join(', '));
+              log('  OBJ KEYS: ' + Object.keys(data).join(', '));
             }
           } catch(e) {}
         }
         resolve();
       };
-      xhr.onerror = function () { log(label + ' error (CORS?)'); resolve(); };
-      xhr.ontimeout = function () { log(label + ' timeout'); resolve(); };
+      xhr.onerror = function () { log('ERR ' + label); resolve(); };
+      xhr.ontimeout = function () { log('TMO ' + label); resolve(); };
       xhr.send();
     });
   }
 
-  var domoBase = 'https://' + customer + '.domo.com';
-  log('DOMO base: ' + domoBase);
+  // Systematic path exploration
+  var paths = [
+    // /api/ prefix variations
+    '/api/data/v1/dataset',
+    '/api/data/v1/' + dsId,
+    '/api/v1/data/dataset',
+    '/api/v1/dataset',
+    '/api/dataset',
+    '/api/query/v1/execute/' + dsId,
+    // /domo/ prefix
+    '/domo/data/v1/dataset',
+    '/domo/data/v1/' + dsId,
+    // direct /data/ with auth (retry - maybe auth makes it work)
+    '/data/v1/dataset',
+    '/data/v1/' + dsId,
+    '/data/v2/dataset',
+    // /sql/ prefix
+    '/sql/v1/' + dsId,
+    // Other common patterns
+    '/datasets/' + dsId + '/data',
+    '/datasets/dataset/data',
+    '/v1/datasets/' + dsId + '/data',
+    // Phoenix brick patterns
+    '/phoenix/data/dataset',
+    '/brick/data/dataset',
+    // Check what paths exist
+    '/api',
+    '/api/',
+    '/api/v1',
+  ];
 
-  // Try paths on the app's own domain first (non /data/v1/)
-  tryXHR('app-root', '/', {})
-  .then(function () {
-    return tryXHR('app-api', '/api/data/v1/' + datasetId, {
-      'x-domo-authentication': token,
-      'Accept': 'application/json'
+  var i = 0;
+  function next() {
+    if (i >= paths.length) {
+      log('=== DONE: tested ' + paths.length + ' paths ===');
+      return;
+    }
+    tryXHR('path' + i, paths[i]).then(function () {
+      i++;
+      next();
     });
-  })
-  .then(function () {
-    // Try DOMO main instance
-    return tryXHR('domo-query', domoBase + '/api/query/v1/execute/' + datasetId, {
-      'x-domo-authentication': token,
-      'Accept': 'application/json'
-    });
-  })
-  .then(function () {
-    return tryXHR('domo-data', domoBase + '/api/data/v1/' + datasetId + '?includeHeader=true&limit=5', {
-      'x-domo-authentication': token,
-      'Accept': 'application/json'
-    });
-  })
-  .then(function () {
-    return tryXHR('domo-sql', domoBase + '/sql/v1/' + datasetId, {
-      'x-domo-authentication': token,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    });
-  })
-  .then(function () {
-    // Try without custom headers (rely on cookies)
-    return tryXHR('domo-data-nocreds', domoBase + '/api/data/v1/' + datasetId + '?includeHeader=true&limit=5', {
-      'Accept': 'application/json'
-    });
-  })
-  .then(function () {
-    // Try fetch with credentials: include to send cookies cross-origin
-    log('--- fetch-with-cookies ---');
-    return fetch(domoBase + '/api/data/v1/' + datasetId + '?includeHeader=true&limit=5', {
-      credentials: 'include',
-      headers: { 'Accept': 'application/json' }
-    }).then(function (r) {
-      log('fetch-with-cookies status: ' + r.status);
-      return r.text();
-    }).then(function (t) {
-      log('fetch-with-cookies body: ' + t.substring(0, 400));
-    }).catch(function (e) {
-      log('fetch-with-cookies error: ' + e.message);
-    });
-  })
-  .then(function () {
-    log('=== ALL DONE ===');
-  });
+  }
+
+  log('Testing ' + paths.length + ' path variations...');
+  next();
 })();
