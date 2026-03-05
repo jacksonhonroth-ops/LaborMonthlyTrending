@@ -11,7 +11,7 @@ var revenueCategory = "Service Revenue";
 
 // Source values
 var sourceActual = "ACTUAL";
-var sourceBudget = "OPS_FIN_BUDGET";
+var sourceBudget = "GL_FORECAST";
 
 // Current year filter
 var currentYear = 2026;
@@ -74,9 +74,15 @@ domo.get(query, { format: "array-of-arrays" })
 // ─── Filters ──────────────────────────────────────────────────────────
 
 var filterRegion = document.getElementById("filter-region");
+var filterOps = document.getElementById("filter-ops");
 var filterJob = document.getElementById("filter-job");
 var filterAccount = document.getElementById("filter-account");
-var filterOps = document.getElementById("filter-ops");
+var jobList = document.getElementById("job-list");
+var accountList = document.getElementById("account-list");
+
+// Track valid values for search inputs
+var validJobs = {};
+var validAccounts = {};
 
 function populateFilters(data, cols) {
   var regions = {};
@@ -89,20 +95,23 @@ function populateFilters(data, cols) {
     var j = row[cols.job];
     var a = row[cols.account];
     var o = row[cols.opsLead];
-    if (r) regions[r] = true;
+    // Exclude HQ region
+    if (r && r !== "HQ") regions[r] = true;
     if (j) jobs[j] = true;
     if (a) accounts[a] = true;
     if (o) leads[o] = true;
   });
 
+  validJobs = jobs;
+  validAccounts = accounts;
+
   fillSelect(filterRegion, Object.keys(regions).sort());
-  fillSelect(filterJob, Object.keys(jobs).sort());
-  fillSelect(filterAccount, Object.keys(accounts).sort());
   fillSelect(filterOps, Object.keys(leads).sort());
+  fillDatalist(jobList, Object.keys(jobs).sort());
+  fillDatalist(accountList, Object.keys(accounts).sort());
 }
 
 function fillSelect(el, values) {
-  // Keep existing "All" option, append values
   values.forEach(function (v) {
     var opt = document.createElement("option");
     opt.value = v;
@@ -111,33 +120,64 @@ function fillSelect(el, values) {
   });
 }
 
-// Filter change listeners
-[filterRegion, filterJob, filterAccount, filterOps].forEach(function (el) {
+function fillDatalist(el, values) {
+  values.forEach(function (v) {
+    var opt = document.createElement("option");
+    opt.value = v;
+    el.appendChild(opt);
+  });
+}
+
+// Filter change listeners — dropdowns
+[filterRegion, filterOps].forEach(function (el) {
+  el.addEventListener("change", refreshView);
+});
+
+// Search inputs — debounced refresh on input
+var searchTimer = null;
+[filterJob, filterAccount].forEach(function (el) {
+  el.addEventListener("input", function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(refreshView, 300);
+  });
+  // Also refresh immediately on selecting from datalist (change event)
   el.addEventListener("change", refreshView);
 });
 
 document.getElementById("filter-clear").addEventListener("click", function () {
   filterRegion.value = "";
+  filterOps.value = "";
   filterJob.value = "";
   filterAccount.value = "";
-  filterOps.value = "";
   refreshView();
 });
 
 // Apply filters to raw rows
 function getFilteredRows() {
   var rVal = filterRegion.value;
-  var jVal = filterJob.value;
-  var aVal = filterAccount.value;
   var oVal = filterOps.value;
+  var jVal = filterJob.value.trim();
+  var aVal = filterAccount.value.trim();
 
   if (!rVal && !jVal && !aVal && !oVal) return rawData.rows;
 
+  // For search inputs, support partial match (case-insensitive)
+  var jLower = jVal.toLowerCase();
+  var aLower = aVal.toLowerCase();
+
   return rawData.rows.filter(function (row) {
+    // Always exclude HQ region
+    if (row[colIndices.region] === "HQ") return false;
     if (rVal && row[colIndices.region] !== rVal) return false;
-    if (jVal && row[colIndices.job] !== jVal) return false;
-    if (aVal && row[colIndices.account] !== aVal) return false;
     if (oVal && row[colIndices.opsLead] !== oVal) return false;
+    if (jVal) {
+      var rowJob = (row[colIndices.job] || "").toString().toLowerCase();
+      if (rowJob.indexOf(jLower) === -1) return false;
+    }
+    if (aVal) {
+      var rowAcct = (row[colIndices.account] || "").toString().toLowerCase();
+      if (rowAcct.indexOf(aLower) === -1) return false;
+    }
     return true;
   });
 }
@@ -187,7 +227,7 @@ function refreshView() {
 
 function aggregateData(rows, cols) {
   var actual = {};
-  var budget = {};
+  var forecast = {};
 
   rows.forEach(function (row) {
     var monthRaw = row[cols.month];
@@ -204,7 +244,7 @@ function aggregateData(rows, cols) {
     var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
     var monthKey = year + "-" + mm;
 
-    var target = (source === sourceActual) ? actual : budget;
+    var target = (source === sourceActual) ? actual : forecast;
     if (!target[monthKey]) {
       target[monthKey] = { labor: 0, revenue: 0 };
     }
@@ -212,14 +252,15 @@ function aggregateData(rows, cols) {
     if (laborCategories.indexOf(category) !== -1) {
       target[monthKey].labor += amount;
     } else if (category === revenueCategory) {
-      target[monthKey].revenue += amount;
+      // Revenue is stored as negative (credit convention) — negate to positive
+      target[monthKey].revenue += amount * -1;
     }
   });
 
-  // Merge month keys from both sources
+  // Build sorted month keys from forecast (covers all 12 months)
   var allKeys = {};
   Object.keys(actual).forEach(function (k) { allKeys[k] = true; });
-  Object.keys(budget).forEach(function (k) { allKeys[k] = true; });
+  Object.keys(forecast).forEach(function (k) { allKeys[k] = true; });
   var sortedKeys = Object.keys(allKeys).sort();
 
   var months = [];
@@ -227,27 +268,36 @@ function aggregateData(rows, cols) {
   var budgetLabor = [];
   var actualDL = [];
   var budgetDL = [];
+  var monthSources = []; // Track ACT vs FCST per month
 
   sortedKeys.forEach(function (key) {
     var parts = key.split("-");
     var monthNum = parseInt(parts[1], 10);
-    months.push(monthNames[monthNum - 1] + " " + parts[0]);
 
-    var a = actual[key] || { labor: 0, revenue: 0 };
-    var b = budget[key] || { labor: 0, revenue: 0 };
+    var a = actual[key];
+    var f = forecast[key] || { labor: 0, revenue: 0 };
 
-    actualLabor.push(a.labor);
-    budgetLabor.push(b.labor);
+    // Use actuals if they exist for this month, otherwise use forecast
+    var useActual = a && (a.labor !== 0 || a.revenue !== 0);
+    var display = useActual ? a : f;
 
-    var aRev = Math.abs(a.revenue);
-    var bRev = Math.abs(b.revenue);
-    actualDL.push(aRev !== 0 ? parseFloat(((a.labor / aRev) * 100).toFixed(2)) : 0);
-    budgetDL.push(bRev !== 0 ? parseFloat(((b.labor / bRev) * 100).toFixed(2)) : 0);
+    var label = monthNames[monthNum - 1] + " " + parts[0];
+    months.push(label);
+    monthSources.push(useActual ? "ACT" : "FCST");
+
+    actualLabor.push(display.labor);
+    budgetLabor.push(f.labor);
+
+    var dispRev = display.revenue;
+    var fRev = f.revenue;
+    actualDL.push(dispRev !== 0 ? parseFloat(((display.labor / dispRev) * 100).toFixed(2)) : 0);
+    budgetDL.push(fRev !== 0 ? parseFloat(((f.labor / fRev) * 100).toFixed(2)) : 0);
   });
 
   return {
     months: months,
     monthKeys: sortedKeys,
+    monthSources: monthSources,
     actualLabor: actualLabor,
     budgetLabor: budgetLabor,
     actualDL: actualDL,
@@ -264,6 +314,20 @@ function buildChart(data) {
   var actualDL = data.actualDL;
   var budgetDL = data.budgetDL;
   var monthKeys = data.monthKeys;
+  var monthSources = data.monthSources;
+
+  // Color actual bars differently for ACT vs FCST months
+  var barColors = monthSources.map(function (s) {
+    return s === "ACT" ? "rgba(74, 144, 217, 0.85)" : "rgba(74, 144, 217, 0.45)";
+  });
+  var barBorders = monthSources.map(function (s) {
+    return s === "ACT" ? "rgba(74, 144, 217, 1)" : "rgba(74, 144, 217, 0.7)";
+  });
+
+  // X-axis labels with ACT/FCST suffix
+  var xLabels = months.map(function (m, i) {
+    return m + "\n(" + monthSources[i] + ")";
+  });
 
   // MOM changes for actual
   var momLaborChange = [];
@@ -289,14 +353,14 @@ function buildChart(data) {
   chartInstance = new Chart(ctx, {
     type: "bar",
     data: {
-      labels: months,
+      labels: xLabels,
       datasets: [
         {
           label: "Actual Labor $",
           type: "bar",
           data: actualLabor,
-          backgroundColor: "rgba(74, 144, 217, 0.75)",
-          borderColor: "rgba(74, 144, 217, 1)",
+          backgroundColor: barColors,
+          borderColor: barBorders,
           borderWidth: 1,
           borderRadius: 3,
           yAxisID: "yDollars",

@@ -15,13 +15,13 @@
         <div id="header-right">
           <div id="legend">
             <span class="legend-item">
-              <span class="legend-bar actual"></span> Actual
+              <span class="legend-bar actual"></span> Actual / Forecast
             </span>
             <span class="legend-item">
               <span class="legend-bar budget"></span> Budget
             </span>
             <span class="legend-item">
-              <span class="legend-line actual-line"></span> DL % Actual
+              <span class="legend-line actual-line"></span> DL %
             </span>
             <span class="legend-item">
               <span class="legend-line budget-line"></span> DL % Budget
@@ -45,16 +45,18 @@
           <select id="filter-region"><option value="">All</option></select>
         </div>
         <div class="filter-group">
+          <label for="filter-ops">Ops Lead</label>
+          <select id="filter-ops"><option value="">All</option></select>
+        </div>
+        <div class="filter-group">
           <label for="filter-job">Job Number</label>
-          <select id="filter-job"><option value="">All</option></select>
+          <input id="filter-job" type="text" list="job-list" placeholder="Search..." autocomplete="off">
+          <datalist id="job-list"></datalist>
         </div>
         <div class="filter-group">
           <label for="filter-account">Parent Account</label>
-          <select id="filter-account"><option value="">All</option></select>
-        </div>
-        <div class="filter-group">
-          <label for="filter-ops">Ops Lead</label>
-          <select id="filter-ops"><option value="">All</option></select>
+          <input id="filter-account" type="text" list="account-list" placeholder="Search..." autocomplete="off">
+          <datalist id="account-list"></datalist>
         </div>
         <button id="filter-clear" title="Clear all filters">Clear</button>
       </div>
