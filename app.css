@@ -179,25 +179,40 @@ body {
   letter-spacing: 0.5px;
 }
 
-.filter-group select {
+.filter-group select,
+.filter-group input[type="text"] {
   padding: 7px 28px 7px 10px;
   border: 1px solid #dce1e8;
   border-radius: 7px;
   font-size: 12px;
   font-family: inherit;
   color: #333;
+  background: #fff;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.filter-group select {
   background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E") no-repeat right 10px center;
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.filter-group select:hover {
+.filter-group input[type="text"] {
+  padding-right: 10px;
+}
+
+.filter-group input[type="text"]::placeholder {
+  color: #aab;
+}
+
+.filter-group select:hover,
+.filter-group input[type="text"]:hover {
   border-color: #b0bec5;
 }
 
-.filter-group select:focus {
+.filter-group select:focus,
+.filter-group input[type="text"]:focus {
   outline: none;
   border-color: #4a90d9;
   box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.12);
