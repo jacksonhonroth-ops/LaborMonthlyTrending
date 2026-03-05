@@ -1,7 +1,7 @@
-/* Debug v10: dig into /data/v1/{uuid} which returns 400 */
+/* Debug v11: /data/v1/dataset with limits and long timeout */
 (function () {
   var out = document.getElementById('loader');
-  out.innerHTML = '<p style="font-weight:bold">Debug v10 - /data/v1/{uuid} deep probe</p>';
+  out.innerHTML = '<p style="font-weight:bold">Debug v11 - dataset alias with limits</p>';
 
   function log(msg) {
     console.log(msg);
@@ -11,105 +11,68 @@
     out.appendChild(p);
   }
 
-  var token = window.__RYUU_AUTHENTICATION_TOKEN__;
-  var dsId = '6c5e3f1b-56c4-4273-98ec-4af164645cfa';
-  var base = '/data/v1/' + dsId;
-
-  function tryReq(label, method, url, hdrs, body) {
+  function tryReq(label, url, timeout) {
     return new Promise(function (resolve) {
+      log('>>> ' + label + ': ' + url);
+      var start = Date.now();
       var xhr = new XMLHttpRequest();
-      xhr.open(method, url, true);
-      if (hdrs) {
-        for (var k in hdrs) { try { xhr.setRequestHeader(k, hdrs[k]); } catch(e){} }
-      }
-      xhr.timeout = 6000;
+      xhr.open('GET', url, true);
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.timeout = timeout || 30000;
       xhr.onload = function () {
-        log(xhr.status + ' [' + method + '] ' + label);
-        log('  → ' + (xhr.responseText || '').substring(0, 400));
-        resolve(xhr);
+        var elapsed = ((Date.now() - start) / 1000).toFixed(1);
+        log(label + ' → ' + xhr.status + ' in ' + elapsed + 's, ' + (xhr.responseText||'').length + ' bytes');
+        if (xhr.status === 200 && xhr.responseText) {
+          log(label + ' FIRST 800: ' + xhr.responseText.substring(0, 800));
+          try {
+            var data = JSON.parse(xhr.responseText);
+            if (Array.isArray(data)) {
+              log(label + ': ARRAY ' + data.length + ' rows');
+              if (data.length > 0) {
+                log('KEYS: ' + Object.keys(data[0]).join(', '));
+                log('ROW0: ' + JSON.stringify(data[0]));
+                if (data.length > 1) log('ROW1: ' + JSON.stringify(data[1]));
+              }
+            } else {
+              log(label + ': OBJECT keys=' + Object.keys(data).join(', '));
+              for (var k in data) {
+                var v = data[k];
+                if (Array.isArray(v)) log('  ' + k + ': array[' + v.length + ']');
+                else log('  ' + k + ': ' + JSON.stringify(v).substring(0, 200));
+              }
+            }
+          } catch(e) { log('parse err: ' + e.message); }
+        } else if (xhr.status !== 200) {
+          log(label + ' body: ' + (xhr.responseText||'').substring(0, 300));
+        }
+        resolve();
       };
-      xhr.onerror = function () { log('ERR ' + label); resolve(null); };
-      xhr.ontimeout = function () { log('TMO ' + label); resolve(null); };
-      xhr.send(body || null);
+      xhr.onerror = function () {
+        log(label + ' ERROR after ' + ((Date.now()-start)/1000).toFixed(1) + 's');
+        resolve();
+      };
+      xhr.ontimeout = function () {
+        log(label + ' TIMEOUT after ' + ((Date.now()-start)/1000).toFixed(1) + 's');
+        resolve();
+      };
+      xhr.send();
     });
   }
 
-  // First: see what the 400 error body says
-  tryReq('bare GET', 'GET', base, {})
+  // Try the alias "dataset" with various query/limit params
+  tryReq('sql-limit3', '/data/v1/dataset?query=' + encodeURIComponent('SELECT * FROM dataset LIMIT 3'), 30000)
   .then(function () {
-    // Add auth
-    return tryReq('GET+auth', 'GET', base, {
-      'x-domo-authentication': token
-    });
+    return tryReq('limit-param', '/data/v1/dataset?limit=3', 30000);
   })
   .then(function () {
-    return tryReq('GET+auth+json', 'GET', base, {
-      'x-domo-authentication': token,
-      'Accept': 'application/json'
-    });
+    return tryReq('fields-limit', '/data/v1/dataset?fields=MONTH,AMOUNT&limit=3', 30000);
   })
   .then(function () {
-    return tryReq('GET+bearer', 'GET', base, {
-      'Authorization': 'Bearer ' + token
-    });
+    return tryReq('sql-count', '/data/v1/dataset?query=' + encodeURIComponent('SELECT COUNT(*) FROM dataset'), 30000);
   })
   .then(function () {
-    // Try with query params
-    return tryReq('GET+auth+limit', 'GET', base + '?limit=5', {
-      'x-domo-authentication': token,
-      'Accept': 'application/json'
-    });
-  })
-  .then(function () {
-    // Try with SQL
-    var sql = encodeURIComponent('SELECT * LIMIT 5');
-    return tryReq('GET+auth+sql', 'GET', base + '?query=' + sql, {
-      'x-domo-authentication': token,
-      'Accept': 'application/json'
-    });
-  })
-  .then(function () {
-    // Try POST
-    return tryReq('POST+auth', 'POST', base, {
-      'x-domo-authentication': token,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    }, JSON.stringify({ query: 'SELECT * LIMIT 5' }));
-  })
-  .then(function () {
-    // Try POST with SQL body
-    return tryReq('POST+sql-text', 'POST', base, {
-      'x-domo-authentication': token,
-      'Content-Type': 'text/plain',
-      'Accept': 'application/json'
-    }, 'SELECT * LIMIT 5');
-  })
-  .then(function () {
-    // Try with includeHeader
-    return tryReq('GET+includeHeader', 'GET', base + '?includeHeader=true&limit=5', {
-      'x-domo-authentication': token,
-      'Accept': 'text/csv'
-    });
-  })
-  .then(function () {
-    // Try text/csv accept
-    return tryReq('GET+csv', 'GET', base, {
-      'x-domo-authentication': token,
-      'Accept': 'text/csv'
-    });
-  })
-  .then(function () {
-    // Try Accept: */*
-    return tryReq('GET+star', 'GET', base, {
-      'x-domo-authentication': token,
-      'Accept': '*/*'
-    });
-  })
-  .then(function () {
-    // Try no Accept header at all, just auth
-    return tryReq('GET+auth-only', 'GET', base, {
-      'x-domo-authentication': token
-    });
+    // Long timeout on plain fetch - maybe it just takes >8s
+    return tryReq('plain-30s', '/data/v1/dataset', 45000);
   })
   .then(function () {
     log('=== DONE ===');
