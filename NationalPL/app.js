@@ -1,7 +1,7 @@
-/* Debug v6: brute-force discover the DOMO postMessage protocol */
+/* Debug v7: use RYUU auth token for data fetch */
 (function () {
   var out = document.getElementById('loader');
-  out.innerHTML = '<p style="font-weight:bold">Debug v6 - postMessage protocol discovery</p>';
+  out.innerHTML = '<p style="font-weight:bold">Debug v7 - authenticated fetch</p>';
 
   function log(msg) {
     console.log(msg);
@@ -11,93 +11,85 @@
     out.appendChild(p);
   }
 
-  /* Listen for ALL messages from parent */
-  var msgCount = 0;
-  window.addEventListener('message', function (event) {
-    msgCount++;
-    log('MSG #' + msgCount + ' from: ' + event.origin);
-    var d = event.data;
-    if (typeof d === 'string') {
-      log('  string (' + d.length + '): ' + d.substring(0, 300));
-      try { d = JSON.parse(d); } catch(e) { return; }
-    }
-    if (d && typeof d === 'object') {
-      log('  keys: ' + Object.keys(d).join(', '));
-      log('  json: ' + JSON.stringify(d).substring(0, 500));
-    }
-  });
+  var token = window.__RYUU_AUTHENTICATION_TOKEN__;
+  var sid = window.__RYUU_SID__;
+  log('Token: ' + (token ? token.substring(0, 50) + '...' : 'MISSING'));
+  log('SID: ' + (sid || 'MISSING'));
 
-  /* Try various postMessage formats that DOMO might use */
-  var formats = [
-    // ryuu protocol
-    { __ryuu: true, method: 'GET', url: '/data/v1/dataset' },
-    { __ryuu: true, method: 'GET', url: '/data/v1/dataset', channel: 'data' },
-    // domo.get style
-    { type: 'domo.get', alias: 'dataset' },
-    { type: 'domo-get', alias: 'dataset' },
-    { channel: 'data', method: 'GET', url: '/data/v1/dataset' },
-    // request/response pattern
-    { request: 'data', alias: 'dataset', id: 'req1' },
-    { action: 'getData', datasetAlias: 'dataset', id: 'req2' },
-    // Phoenix brick protocol
-    { type: 'getCardData' },
-    { type: 'requestData', datasetId: '6c5e3f1b-56c4-4273-98ec-4af164645cfa' },
-    // DDX custom app protocol
-    { type: 'getData', dataSetId: '6c5e3f1b-56c4-4273-98ec-4af164645cfa' },
-    // Generic
-    'getData',
-    'getCardData',
-    JSON.stringify({ type: 'getData', alias: 'dataset' })
-  ];
-
-  log('Sending ' + formats.length + ' message formats to parent...');
-  formats.forEach(function (msg, i) {
-    try {
-      window.parent.postMessage(msg, '*');
-      log('Sent #' + i + ': ' + JSON.stringify(msg).substring(0, 100));
-    } catch (e) {
-      log('Send #' + i + ' error: ' + e.message);
-    }
-  });
-
-  /* Also check: is there a service worker? */
-  log('=== Service Worker check ===');
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(function (regs) {
-      log('Service workers: ' + regs.length);
-      regs.forEach(function (r, i) {
-        log('SW ' + i + ': scope=' + r.scope + ' active=' + (r.active ? r.active.scriptURL : 'none'));
-      });
-    });
-  } else {
-    log('No serviceWorker support');
-  }
-
-  /* Check for any global variables that might be DOMO-related */
-  log('=== Window globals scan ===');
-  var interesting = [];
-  for (var key in window) {
-    try {
-      if (window[key] && typeof window[key] === 'object' && key !== 'window' && key !== 'self' && key !== 'top' && key !== 'parent' && key !== 'frames') {
-        if (key.length < 30 && !/^(HTML|CSS|DOM|SVG|URL|IDB|Event|Perf|Nav|Screen|Storage|Location|History|Crypto|Cache|Int|Uint|Float|Big|Array|Map|Set|Weak|Promise|Proxy|Reflect|Symbol|WebSocket|Worker|Shared|Blob|File|Image|Audio|Video|Text|Range|Node|Element|Document|Mutation|Intersection|Resize)/.test(key)) {
-          interesting.push(key);
+  function tryXHR(label, url, headers) {
+    return new Promise(function (resolve) {
+      log('--- ' + label + ' ---');
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      if (headers) {
+        for (var k in headers) {
+          xhr.setRequestHeader(k, headers[k]);
         }
       }
-    } catch (e) { /* skip */ }
+      xhr.timeout = 8000;
+      xhr.onload = function () {
+        log(label + ' status: ' + xhr.status);
+        log(label + ' response length: ' + (xhr.responseText || '').length);
+        log(label + ' body (first 500): ' + (xhr.responseText || '').substring(0, 500));
+        if (xhr.responseText) {
+          try {
+            var data = JSON.parse(xhr.responseText);
+            if (Array.isArray(data)) {
+              log(label + ': ARRAY of ' + data.length + ' rows');
+              if (data.length > 0) {
+                log(label + ' keys: ' + Object.keys(data[0]).join(', '));
+                log(label + ' row[0]: ' + JSON.stringify(data[0]).substring(0, 300));
+              }
+            } else {
+              log(label + ': OBJECT keys: ' + Object.keys(data).join(', '));
+            }
+          } catch (e) {
+            log(label + ' not JSON');
+          }
+        }
+        resolve();
+      };
+      xhr.onerror = function () { log(label + ' XHR error'); resolve(); };
+      xhr.ontimeout = function () { log(label + ' XHR timeout (8s)'); resolve(); };
+      xhr.send();
+    });
   }
-  log('Interesting globals: ' + interesting.join(', '));
 
-  /* Check inline scripts that DOMO injected */
-  log('=== Inline script contents ===');
-  var scripts = document.querySelectorAll('script');
-  for (var i = 0; i < scripts.length; i++) {
-    if (!scripts[i].src && scripts[i].textContent.trim()) {
-      log('Inline script ' + i + ' (' + scripts[i].textContent.length + ' chars): ' + scripts[i].textContent.substring(0, 300));
-    }
-  }
-
-  /* After 5 seconds, report what we got */
-  setTimeout(function () {
-    log('=== 5s timeout: received ' + msgCount + ' messages total ===');
-  }, 5000);
+  // Try various auth header patterns
+  tryXHR('bearer', '/data/v1/dataset', {
+    'Authorization': 'Bearer ' + token
+  })
+  .then(function () {
+    return tryXHR('x-domo-auth', '/data/v1/dataset', {
+      'x-domo-authentication': token
+    });
+  })
+  .then(function () {
+    return tryXHR('x-domo-auth+accept', '/data/v1/dataset', {
+      'x-domo-authentication': token,
+      'Accept': 'application/json'
+    });
+  })
+  .then(function () {
+    return tryXHR('ryuu-token', '/data/v1/dataset', {
+      'x-ryuu-token': token
+    });
+  })
+  .then(function () {
+    return tryXHR('cookie-sid', '/data/v1/dataset', {
+      'x-domo-authentication': token,
+      'x-ryuu-sid': sid
+    });
+  })
+  .then(function () {
+    // Also try SQL query with auth
+    var sql = encodeURIComponent('SELECT * FROM dataset LIMIT 3');
+    return tryXHR('sql+auth', '/data/v1/dataset?query=' + sql, {
+      'x-domo-authentication': token,
+      'Accept': 'application/json'
+    });
+  })
+  .then(function () {
+    log('=== ALL DONE ===');
+  });
 })();
