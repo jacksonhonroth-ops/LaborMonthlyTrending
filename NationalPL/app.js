@@ -1,103 +1,103 @@
-/* Debug v5: try XMLHttpRequest and different fetch modes */
+/* Debug v6: brute-force discover the DOMO postMessage protocol */
 (function () {
   var out = document.getElementById('loader');
-  out.innerHTML = '<p style="font-weight:bold">Debug v5</p>';
+  out.innerHTML = '<p style="font-weight:bold">Debug v6 - postMessage protocol discovery</p>';
 
   function log(msg) {
     console.log(msg);
     var p = document.createElement('p');
-    p.style.cssText = 'font-size:11px;margin:2px 0;font-family:monospace;word-break:break-all;white-space:pre-wrap;';
+    p.style.cssText = 'font-size:10px;margin:1px 0;font-family:monospace;word-break:break-all;white-space:pre-wrap;';
     p.textContent = typeof msg === 'string' ? msg : JSON.stringify(msg);
     out.appendChild(p);
   }
 
-  /* ── Method 1: XMLHttpRequest (sync-ish) ── */
-  log('=== Method 1: XMLHttpRequest ===');
-  try {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', '/data/v1/dataset', true);
-    xhr.onreadystatechange = function () {
-      if (xhr.readyState === 4) {
-        log('XHR status: ' + xhr.status);
-        log('XHR responseText length: ' + (xhr.responseText ? xhr.responseText.length : 'null'));
-        log('XHR first 500: ' + (xhr.responseText || '').substring(0, 500));
-        if (xhr.responseText && xhr.responseText.length > 0) {
-          try {
-            var data = JSON.parse(xhr.responseText);
-            if (Array.isArray(data)) {
-              log('XHR: array of ' + data.length + ' rows');
-              if (data.length > 0) {
-                log('XHR keys: ' + Object.keys(data[0]).join(', '));
-                log('XHR row 0: ' + JSON.stringify(data[0]));
-              }
-            } else {
-              log('XHR: object with keys: ' + Object.keys(data).join(', '));
-              log('XHR data: ' + JSON.stringify(data).substring(0, 500));
-            }
-          } catch (e) {
-            log('XHR parse error: ' + e.message);
-          }
+  /* Listen for ALL messages from parent */
+  var msgCount = 0;
+  window.addEventListener('message', function (event) {
+    msgCount++;
+    log('MSG #' + msgCount + ' from: ' + event.origin);
+    var d = event.data;
+    if (typeof d === 'string') {
+      log('  string (' + d.length + '): ' + d.substring(0, 300));
+      try { d = JSON.parse(d); } catch(e) { return; }
+    }
+    if (d && typeof d === 'object') {
+      log('  keys: ' + Object.keys(d).join(', '));
+      log('  json: ' + JSON.stringify(d).substring(0, 500));
+    }
+  });
+
+  /* Try various postMessage formats that DOMO might use */
+  var formats = [
+    // ryuu protocol
+    { __ryuu: true, method: 'GET', url: '/data/v1/dataset' },
+    { __ryuu: true, method: 'GET', url: '/data/v1/dataset', channel: 'data' },
+    // domo.get style
+    { type: 'domo.get', alias: 'dataset' },
+    { type: 'domo-get', alias: 'dataset' },
+    { channel: 'data', method: 'GET', url: '/data/v1/dataset' },
+    // request/response pattern
+    { request: 'data', alias: 'dataset', id: 'req1' },
+    { action: 'getData', datasetAlias: 'dataset', id: 'req2' },
+    // Phoenix brick protocol
+    { type: 'getCardData' },
+    { type: 'requestData', datasetId: '6c5e3f1b-56c4-4273-98ec-4af164645cfa' },
+    // DDX custom app protocol
+    { type: 'getData', dataSetId: '6c5e3f1b-56c4-4273-98ec-4af164645cfa' },
+    // Generic
+    'getData',
+    'getCardData',
+    JSON.stringify({ type: 'getData', alias: 'dataset' })
+  ];
+
+  log('Sending ' + formats.length + ' message formats to parent...');
+  formats.forEach(function (msg, i) {
+    try {
+      window.parent.postMessage(msg, '*');
+      log('Sent #' + i + ': ' + JSON.stringify(msg).substring(0, 100));
+    } catch (e) {
+      log('Send #' + i + ' error: ' + e.message);
+    }
+  });
+
+  /* Also check: is there a service worker? */
+  log('=== Service Worker check ===');
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function (regs) {
+      log('Service workers: ' + regs.length);
+      regs.forEach(function (r, i) {
+        log('SW ' + i + ': scope=' + r.scope + ' active=' + (r.active ? r.active.scriptURL : 'none'));
+      });
+    });
+  } else {
+    log('No serviceWorker support');
+  }
+
+  /* Check for any global variables that might be DOMO-related */
+  log('=== Window globals scan ===');
+  var interesting = [];
+  for (var key in window) {
+    try {
+      if (window[key] && typeof window[key] === 'object' && key !== 'window' && key !== 'self' && key !== 'top' && key !== 'parent' && key !== 'frames') {
+        if (key.length < 30 && !/^(HTML|CSS|DOM|SVG|URL|IDB|Event|Perf|Nav|Screen|Storage|Location|History|Crypto|Cache|Int|Uint|Float|Big|Array|Map|Set|Weak|Promise|Proxy|Reflect|Symbol|WebSocket|Worker|Shared|Blob|File|Image|Audio|Video|Text|Range|Node|Element|Document|Mutation|Intersection|Resize)/.test(key)) {
+          interesting.push(key);
         }
       }
-    };
-    xhr.onerror = function () {
-      log('XHR onerror fired');
-    };
-    xhr.send();
-  } catch (e) {
-    log('XHR exception: ' + e.message);
+    } catch (e) { /* skip */ }
+  }
+  log('Interesting globals: ' + interesting.join(', '));
+
+  /* Check inline scripts that DOMO injected */
+  log('=== Inline script contents ===');
+  var scripts = document.querySelectorAll('script');
+  for (var i = 0; i < scripts.length; i++) {
+    if (!scripts[i].src && scripts[i].textContent.trim()) {
+      log('Inline script ' + i + ' (' + scripts[i].textContent.length + ' chars): ' + scripts[i].textContent.substring(0, 300));
+    }
   }
 
-  /* ── Method 2: fetch with mode/credentials ── */
-  log('=== Method 2: fetch same-origin ===');
-  fetch('/data/v1/dataset', {
-    mode: 'same-origin',
-    credentials: 'same-origin'
-  }).then(function (r) {
-    log('fetch2 status: ' + r.status);
-    return r.json();
-  }).then(function (data) {
-    if (Array.isArray(data)) {
-      log('fetch2: array of ' + data.length + ' rows');
-      if (data.length > 0) {
-        log('fetch2 keys: ' + Object.keys(data[0]).join(', '));
-        log('fetch2 row 0: ' + JSON.stringify(data[0]));
-      }
-    } else {
-      log('fetch2: object keys: ' + Object.keys(data).join(', '));
-      log('fetch2 data: ' + JSON.stringify(data).substring(0, 500));
-    }
-  }).catch(function (e) {
-    log('fetch2 error: ' + e.message);
-  });
-
-  /* ── Method 3: listen for postMessage from parent ── */
-  log('=== Method 3: listening for postMessage ===');
-  window.addEventListener('message', function (event) {
-    log('postMessage received!');
-    log('origin: ' + event.origin);
-    log('data type: ' + typeof event.data);
-    if (typeof event.data === 'string') {
-      log('data (first 500): ' + event.data.substring(0, 500));
-    } else {
-      log('data keys: ' + Object.keys(event.data || {}).join(', '));
-      log('data: ' + JSON.stringify(event.data).substring(0, 500));
-    }
-  });
-
-  /* ── Method 4: try requesting data from parent via postMessage ── */
-  log('=== Method 4: postMessage to parent ===');
-  try {
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({
-        type: 'getData',
-        alias: 'dataset'
-      }, '*');
-      log('Sent postMessage to parent');
-    } else {
-      log('No parent frame');
-    }
-  } catch (e) {
-    log('postMessage to parent error: ' + e.message);
-  }
+  /* After 5 seconds, report what we got */
+  setTimeout(function () {
+    log('=== 5s timeout: received ' + msgCount + ' messages total ===');
+  }, 5000);
 })();
