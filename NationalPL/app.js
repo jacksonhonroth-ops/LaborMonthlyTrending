@@ -117,31 +117,15 @@
 
   /* ── Data Loading ── */
   function loadData() {
-    /* Try domo.js SDK first (handles auth), fall back to raw fetch */
-    if (typeof domo !== 'undefined' && domo.get) {
-      domo.get('/data/v1/' + DATA_ALIAS, { format: 'array-of-arrays' })
-        .then(function (resp) { initData(resp); })
-        .catch(function (err) {
-          showError('domo.get error: ' + (err.message || err));
-        });
-    } else {
-      /* Fallback: raw fetch (works inside Domo app iframe context) */
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', '/data/v1/' + DATA_ALIAS, true);
-      xhr.setRequestHeader('Accept', 'application/json');
-      xhr.timeout = 60000;
-      xhr.onload = function () {
-        if (xhr.status !== 200) {
-          showError('HTTP ' + xhr.status + ' – ensure dataset is mapped in Domo');
-          return;
-        }
-        try { initData(JSON.parse(xhr.responseText)); }
-        catch (e) { showError('Parse error: ' + e.message); }
-      };
-      xhr.onerror = function () { showError('Network error'); };
-      xhr.ontimeout = function () { showError('Timeout'); };
-      xhr.send();
+    if (typeof domo === 'undefined' || !domo.get) {
+      showError('domo.js SDK not loaded – check script tag in index.html');
+      return;
     }
+    domo.get('/data/v1/' + DATA_ALIAS, { format: 'array-of-arrays' })
+      .then(function (resp) { initData(resp); })
+      .catch(function (err) {
+        showError('Data load failed: ' + (err.message || JSON.stringify(err)));
+      });
   }
 
   function showError(msg) {
