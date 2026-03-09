@@ -174,6 +174,21 @@
       return;
     }
 
+    /* Debug: log columns and unique SOURCE values */
+    console.log('[NatPL] Columns:', cols);
+    console.log('[NatPL] colIdx:', JSON.stringify(colIdx));
+    if (colIdx.source >= 0) {
+      var srcVals = {};
+      for (var s = 0; s < Math.min(rawRows.length, 5000); s++) {
+        var sv = rawRows[s][colIdx.source];
+        if (sv && !srcVals[sv]) srcVals[sv] = 0;
+        if (sv) srcVals[sv]++;
+      }
+      console.log('[NatPL] Unique SOURCE values (first 5k rows):', JSON.stringify(srcVals));
+    } else {
+      console.log('[NatPL] WARNING: SOURCE column not found!');
+    }
+
     populateFilters();
     refreshPL();
   }
@@ -287,7 +302,7 @@
       if (mk.substring(0, 4) !== '2026') continue;
 
       monthSet[mk] = true;
-      var isActual = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS');
+      var isActual = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS' || src === 'ACT');
 
       /* Negate credit categories for ACTUALS only (GL convention); forecast already positive */
       var isCredit = CREDIT_CATS.indexOf(cat) !== -1;
