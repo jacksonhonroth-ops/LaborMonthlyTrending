@@ -57,6 +57,11 @@
   /* Categories stored as credits (negative) in ACTUALS only — forecast is already positive */
   var CREDIT_CATS   = ['Service Revenue', 'Other Income/ Expense'];
 
+  /* Map Metrics column names to P&L Category Names where they differ */
+  var METRICS_MAP = {
+    'Other Expense (Income)': 'Other Income/ Expense'
+  };
+
   /* ── Formatting ── */
   function fmt(val) {
     if (val == null || isNaN(val)) return '';
@@ -166,45 +171,19 @@
       amount: findCol(cols, ['AMOUNT', 'Amount']),
       source: findCol(cols, ['SOURCE', 'Source']),
       cat:    findCol(cols, ['P&L Category Name', 'PLCategoryName']),
+      metrics: findCol(cols, ['Metrics', 'METRICS', 'Metric']),
       region: findCol(cols, ['Region', 'region', 'REGION'])
     };
 
-    if (colIdx.month === -1 || colIdx.amount === -1 || colIdx.cat === -1) {
+    /* Need at least one category column (P&L Category Name or Metrics) */
+    if (colIdx.month === -1 || colIdx.amount === -1 || (colIdx.cat === -1 && colIdx.metrics === -1)) {
       showError('Missing columns. Found: ' + cols.join(', '));
       return;
     }
 
-    /* Debug: log columns and unique SOURCE values */
     console.log('[NatPL] Columns:', cols);
     console.log('[NatPL] colIdx:', JSON.stringify(colIdx));
-    if (colIdx.source >= 0) {
-      var srcVals = {};
-      for (var s = 0; s < rawRows.length; s++) {
-        var sv = rawRows[s][colIdx.source];
-        if (sv && !srcVals[sv]) srcVals[sv] = 0;
-        if (sv) srcVals[sv]++;
-      }
-      console.log('[NatPL] Unique SOURCE values (all ' + rawRows.length + ' rows):', JSON.stringify(srcVals));
-    } else {
-      console.log('[NatPL] WARNING: SOURCE column not found!');
-    }
-
-    /* Debug: check 2026 ACTUAL rows specifically */
-    if (colIdx.source >= 0) {
-      var act2026Samples = [];
-      var act2026CatCounts = {};
-      for (var d = 0; d < rawRows.length; d++) {
-        var sv2 = (rawRows[d][colIdx.source] || '').trim().toUpperCase();
-        var rm2 = ('' + (rawRows[d][colIdx.month] || '')).substring(0, 4);
-        if (sv2 === 'ACTUAL' && rm2 === '2026') {
-          var c2 = rawRows[d][colIdx.cat] || '(empty)';
-          act2026CatCounts[c2] = (act2026CatCounts[c2] || 0) + 1;
-          if (act2026Samples.length < 5) act2026Samples.push(rawRows[d].slice(0));
-        }
-      }
-      console.log('[NatPL] 2026 ACTUAL samples:', JSON.stringify(act2026Samples));
-      console.log('[NatPL] 2026 ACTUAL category counts:', JSON.stringify(act2026CatCounts));
-    }
+    console.log('[NatPL] Total rows:', rawRows.length);
 
     populateFilters();
     refreshPL();
@@ -308,7 +287,12 @@
 
     for (var r = 0; r < rows.length; r++) {
       var row = rows[r];
+      /* Use P&L Category Name first; fall back to Metrics column */
       var cat = row[colIdx.cat];
+      if (!cat && colIdx.metrics >= 0) {
+        cat = row[colIdx.metrics];
+        if (cat && METRICS_MAP[cat]) cat = METRICS_MAP[cat];
+      }
       var rawMonth = row[colIdx.month];
       var rawAmt = parseFloat(row[colIdx.amount]) || 0;
       var src = colIdx.source >= 0 ? (row[colIdx.source] || '').trim().toUpperCase() : '';
