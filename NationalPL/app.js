@@ -317,6 +317,12 @@
 
     console.log('[NatPL] monthActCount:', JSON.stringify(monthActCount));
     console.log('[NatPL] monthFcstCount:', JSON.stringify(monthFcstCount));
+    /* Debug: categories found per source */
+    var actCats = {}, fcstCats = {};
+    for (var ac in actData) actCats[ac] = Object.keys(actData[ac]).length;
+    for (var fc in fcstData) fcstCats[fc] = Object.keys(fcstData[fc]).length;
+    console.log('[NatPL] ACTUAL categories:', JSON.stringify(actCats));
+    console.log('[NatPL] FCST categories:', JSON.stringify(fcstCats));
 
     var monthType = {};
     months.forEach(function (mk) {
