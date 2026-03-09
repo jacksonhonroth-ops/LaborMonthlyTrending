@@ -11,7 +11,7 @@
     "SUM(`AMOUNT`) as `AMOUNT` " +
     "FROM dataset " +
     "WHERE `Column` IN ('ACTUAL', 'GL_FORECAST') " +
-    "AND `Metrics` = `P&L Category Name` " +
+    "AND `MonthlyAlloc` = 'Keep' " +
     "GROUP BY `MONTH`, `Region`, `Column`, `P&L Category Name`, `Metrics`";
 
   /* ── P&L Structure ──

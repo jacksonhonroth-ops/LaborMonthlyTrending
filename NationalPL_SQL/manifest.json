@@ -12,7 +12,8 @@
             { "alias": "SOURCE", "columnName": "SOURCE" },
             { "alias": "Region", "columnName": "Region" },
             { "alias": "Metrics", "columnName": "Metrics" },
-            { "alias": "Column", "columnName": "Column" }
+            { "alias": "Column", "columnName": "Column" },
+            { "alias": "MonthlyAlloc", "columnName": "MonthlyAlloc" }
          ]
       }
    ],
