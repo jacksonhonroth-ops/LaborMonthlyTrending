@@ -1,6 +1,6 @@
 {
    "name": "NationalPL",
-   "version": "0.0.3",
+   "version": "0.0.4",
    "datasetsMapping": [
       {
          "dataSetId": "6c5e3f1b-56c4-4273-98ec-4af164645cfa",
@@ -8,7 +8,7 @@
          "fields": [
             { "alias": "MONTH", "columnName": "MONTH" },
             { "alias": "AMOUNT", "columnName": "AMOUNT" },
-            { "alias": "P&L Category Name", "columnName": "P&L Category Name" },
+            { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
             { "alias": "Region", "columnName": "Region" },
             { "alias": "Metrics", "columnName": "Metrics" },
             { "alias": "Column", "columnName": "Column" }
