@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var DATA_URL = '/data/v1/dataset?limit=500000';
+  var DATA_URL = '/data/v1/dataset?limit=5000000';
 
   /* ── P&L Structure ──
      [label, matchKey, type]
@@ -56,6 +56,14 @@
   /* Categories stored as credits (negative) in ACTUALS only — forecast is already positive */
   var CREDIT_CATS   = ['Service Revenue', 'Other Income/ Expense'];
 
+  /* Map Metrics names to P&L Category Names where they differ */
+  var METRICS_MAP = {
+    'Other Expense (Income)': 'Other Income/ Expense'
+  };
+
+  /* Only aggregate rows matching our defined P&L categories */
+  var VALID_CATS = {};
+  PL_ROWS.forEach(function (r) { if (r[1] && r[1][0] !== '_') VALID_CATS[r[1]] = true; });
 
   /* ── Formatting ── */
   function fmt(val) {
@@ -162,14 +170,15 @@
     rawRows = resp.rows;
 
     colIdx = {
-      month:  findCol(cols, ['MONTH', 'Month']),
-      amount: findCol(cols, ['AMOUNT', 'Amount']),
-      source: findCol(cols, ['SOURCE', 'Source']),
-      cat:    findCol(cols, ['P&L Category Name', 'PLCategoryName']),
-      region: findCol(cols, ['Region', 'region', 'REGION'])
+      month:   findCol(cols, ['MONTH', 'Month']),
+      amount:  findCol(cols, ['AMOUNT', 'Amount']),
+      source:  findCol(cols, ['SOURCE', 'Source']),
+      cat:     findCol(cols, ['P&L Category Name', 'PLCategoryName']),
+      metrics: findCol(cols, ['Metrics', 'METRICS', 'Metric']),
+      region:  findCol(cols, ['Region', 'region', 'REGION'])
     };
 
-    if (colIdx.month === -1 || colIdx.amount === -1 || colIdx.cat === -1) {
+    if (colIdx.month === -1 || colIdx.amount === -1 || (colIdx.cat === -1 && colIdx.metrics === -1)) {
       showError('Missing columns. Found: ' + cols.join(', '));
       return;
     }
@@ -280,12 +289,16 @@
 
     for (var r = 0; r < rows.length; r++) {
       var row = rows[r];
-      var cat = row[colIdx.cat] || '';
+      /* Use P&L Category Name; fall back to Metrics if empty */
+      var cat = (colIdx.cat >= 0 && row[colIdx.cat]) ? row[colIdx.cat] : '';
+      if (!cat && colIdx.metrics >= 0) cat = row[colIdx.metrics] || '';
+      if (METRICS_MAP[cat]) cat = METRICS_MAP[cat];
       var rawMonth = row[colIdx.month];
       var rawAmt = parseFloat(row[colIdx.amount]) || 0;
       var src = colIdx.source >= 0 ? (row[colIdx.source] || '').trim().toUpperCase() : '';
 
-      if (!cat || !rawMonth) continue;
+      /* Skip rows with no category, no month, or categories not in our P&L */
+      if (!cat || !rawMonth || !VALID_CATS[cat]) continue;
 
       var mk = rawMonth.substring(0, 7);
       if (mk.substring(0, 4) !== '2026') continue;
