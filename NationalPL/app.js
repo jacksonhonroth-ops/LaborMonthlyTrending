@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var DATA_URL = '/data/v1/dataset?filter=YEAR=2026';
+  var DATA_URL = '/data/v1/dataset?limit=500000';
 
   /* ── P&L Structure ──
      [label, matchKey, type]
@@ -179,12 +179,12 @@
     console.log('[NatPL] colIdx:', JSON.stringify(colIdx));
     if (colIdx.source >= 0) {
       var srcVals = {};
-      for (var s = 0; s < Math.min(rawRows.length, 5000); s++) {
+      for (var s = 0; s < rawRows.length; s++) {
         var sv = rawRows[s][colIdx.source];
         if (sv && !srcVals[sv]) srcVals[sv] = 0;
         if (sv) srcVals[sv]++;
       }
-      console.log('[NatPL] Unique SOURCE values (first 5k rows):', JSON.stringify(srcVals));
+      console.log('[NatPL] Unique SOURCE values (all ' + rawRows.length + ' rows):', JSON.stringify(srcVals));
     } else {
       console.log('[NatPL] WARNING: SOURCE column not found!');
     }
@@ -301,7 +301,11 @@
       var mk = rawMonth.substring(0, 7);
       if (mk.substring(0, 4) !== '2026') continue;
 
-      var isActual = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS' || src === 'ACT');
+      var isActual   = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS' || src === 'ACT');
+      var isForecast = (src === 'GL_FORECAST' || src === 'FORECAST' || src === 'FCST');
+
+      /* Skip GL_BUDGET, blank, and any other non-relevant sources */
+      if (!isActual && !isForecast) continue;
 
       monthSet[mk] = true;
 
