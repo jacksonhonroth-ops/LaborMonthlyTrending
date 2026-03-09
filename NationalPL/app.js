@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var DATA_ALIAS = 'gl_financials';
+  var DATA_ALIAS = 'dataset';
 
   /* ── P&L Structure ──
      [label, matchKey, type]

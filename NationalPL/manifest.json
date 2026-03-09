@@ -4,7 +4,7 @@
    "datasetsMapping": [
       {
          "dataSetId": "6c5e3f1b-56c4-4273-98ec-4af164645cfa",
-         "alias": "gl_financials",
+         "alias": "dataset",
          "fields": [
             { "alias": "MONTH", "columnName": "MONTH" },
             { "alias": "AMOUNT", "columnName": "AMOUNT" },
