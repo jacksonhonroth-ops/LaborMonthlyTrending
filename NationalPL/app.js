@@ -301,11 +301,7 @@
       var mk = rawMonth.substring(0, 7);
       if (mk.substring(0, 4) !== '2026') continue;
 
-      var isActual  = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS' || src === 'ACT');
-      var isForecast = (src === 'GL_FORECAST' || src === 'FORECAST' || src === 'FCST');
-
-      /* Skip rows that are neither actuals nor forecast (e.g. GL_BUDGET, Blank) */
-      if (!isActual && !isForecast) continue;
+      var isActual = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS' || src === 'ACT');
 
       monthSet[mk] = true;
 
