@@ -7,7 +7,8 @@
 (function () {
   'use strict';
 
-  var DATA_URL = '/data/v1/dataset';
+  var SQL_URL = '/sql/v1/dataset';
+  var SQL_QUERY = "SELECT `MONTH`, `AMOUNT`, `P&L Category Name`, `SOURCE`, `Region` FROM dataset WHERE YEAR(`MONTH`) = 2026";
 
   /* ── P&L Structure ──
      [label, matchKey, type]
@@ -137,15 +138,16 @@
     }
   }
 
-  /* ── Data Loading ── */
+  /* ── Data Loading (SQL query to filter server-side) ── */
   function loadData() {
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', DATA_URL, true);
+    xhr.open('POST', SQL_URL, true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.setRequestHeader('Accept', 'application/json');
-    xhr.timeout = 60000;
+    xhr.timeout = 120000;
     xhr.onload = function () {
       if (xhr.status !== 200) {
-        showError('HTTP ' + xhr.status);
+        showError('HTTP ' + xhr.status + ': ' + xhr.responseText.substring(0, 200));
         return;
       }
       try {
@@ -156,8 +158,8 @@
       }
     };
     xhr.onerror = function () { showError('Network error'); };
-    xhr.ontimeout = function () { showError('Timeout – dataset may be too large'); };
-    xhr.send();
+    xhr.ontimeout = function () { showError('Timeout'); };
+    xhr.send(JSON.stringify({ sql: SQL_QUERY }));
   }
 
   function showError(msg) {
