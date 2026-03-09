@@ -124,7 +124,8 @@
     domo.get('/data/v1/' + DATA_ALIAS, { format: 'array-of-arrays' })
       .then(function (resp) { initData(resp); })
       .catch(function (err) {
-        showError('Data load failed: ' + (err.message || JSON.stringify(err)));
+        var msg = err && err.message ? err.message : JSON.stringify(err);
+        showError('Data load failed: ' + msg + ' — Map dataset 6c5e3f1b-56c4-4273-98ec-4af164645cfa with alias "dataset" in Pro Code settings.');
       });
   }
 
