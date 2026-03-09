@@ -301,8 +301,13 @@
       var mk = rawMonth.substring(0, 7);
       if (mk.substring(0, 4) !== '2026') continue;
 
+      var isActual  = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS' || src === 'ACT');
+      var isForecast = (src === 'GL_FORECAST' || src === 'FORECAST' || src === 'FCST');
+
+      /* Skip rows that are neither actuals nor forecast (e.g. GL_BUDGET, Blank) */
+      if (!isActual && !isForecast) continue;
+
       monthSet[mk] = true;
-      var isActual = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS' || src === 'ACT');
 
       /* Negate credit categories for ACTUALS only (GL convention); forecast already positive */
       var isCredit = CREDIT_CATS.indexOf(cat) !== -1;
