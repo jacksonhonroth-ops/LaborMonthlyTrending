@@ -6,12 +6,12 @@
 (function () {
   'use strict';
 
-  var SQL_QUERY = "SELECT `MONTH`, `Region`, `SOURCE`, " +
+  var SQL_QUERY = "SELECT `MONTH`, `Region`, `Column` as `SOURCE`, " +
     "`P&L Category Name`, `Metrics`, " +
     "SUM(`AMOUNT`) as `AMOUNT` " +
     "FROM dataset " +
-    "WHERE `SOURCE` IN ('ACTUAL', 'GL_FORECAST') " +
-    "GROUP BY `MONTH`, `Region`, `SOURCE`, `P&L Category Name`, `Metrics`";
+    "WHERE `Column` IN ('ACTUAL', 'GL_FORECAST') " +
+    "GROUP BY `MONTH`, `Region`, `Column`, `P&L Category Name`, `Metrics`";
 
   /* ── P&L Structure ──
      [label, matchKey, type]
