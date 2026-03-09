@@ -348,9 +348,22 @@
     }
     console.log('[NatPL-SQL] Skipped categories (sample):', JSON.stringify(skipped));
 
+    /* Determine current month key (YYYY-MM) */
+    var now = new Date();
+    var curMonthKey = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+
     var monthType = {};
     months.forEach(function (mk) {
-      monthType[mk] = monthActCount[mk] ? 'ACT' : 'FCST';
+      if (monthActCount[mk]) {
+        /* Current month with partial actuals: prefer forecast if available */
+        if (mk === curMonthKey && monthFcstCount[mk]) {
+          monthType[mk] = 'FCST';
+        } else {
+          monthType[mk] = 'ACT';
+        }
+      } else {
+        monthType[mk] = 'FCST';
+      }
     });
 
     /* Merged data: pick actuals or forecast per month */
