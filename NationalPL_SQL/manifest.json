@@ -11,7 +11,8 @@
             { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
             { "alias": "SOURCE", "columnName": "SOURCE" },
             { "alias": "Region", "columnName": "Region" },
-            { "alias": "Metrics", "columnName": "Metrics" }
+            { "alias": "Metrics", "columnName": "Metrics" },
+            { "alias": "Column", "columnName": "Column" }
          ]
       }
    ],
