@@ -2,6 +2,7 @@
    National P&L – DOMO Phoenix Pro Code Card
    Fetches via /data/v1/dataset?limit=N (ryuu columnar format)
    SOURCE: ACTUAL = actuals, GL_FORECAST = forecast
+   Filters: Region, Ops Lead, Job Number, Parent Account
    ================================================================ */
 (function () {
   'use strict';
@@ -53,6 +54,9 @@
   var OPEX_CATS     = ['Field Overhead', 'HQ Overhead', 'Sales Overhead', 'Benefits & Taxes'];
   var OTHER_CATS    = ['Control Account', 'Income Taxes', 'Other Income/ Expense'];
 
+  /* Categories stored as credits (negative in GL) — negate to show positive */
+  var CREDIT_CATS   = ['Service Revenue', 'Other Income/ Expense'];
+
   /* ── Formatting ── */
   function fmt(val) {
     if (val == null || isNaN(val)) return '';
@@ -78,6 +82,39 @@
     return names[parseInt(parts[1], 10) - 1] + ' ' + parts[0].slice(-2);
   }
 
+  /* ── Stored state ── */
+  var rawRows = null;
+  var colIdx = null;
+
+  /* ── Filter elements ── */
+  var filterRegion  = document.getElementById('filter-region');
+  var filterOps     = document.getElementById('filter-ops');
+  var filterJob     = document.getElementById('filter-job');
+  var filterAccount = document.getElementById('filter-account');
+
+  /* Dropdown change listeners */
+  [filterRegion, filterOps].forEach(function (el) {
+    el.addEventListener('change', function () { refreshPL(); });
+  });
+
+  /* Search input listeners (debounced) */
+  var searchTimer = null;
+  [filterJob, filterAccount].forEach(function (el) {
+    el.addEventListener('input', function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () { refreshPL(); }, 300);
+    });
+    el.addEventListener('change', function () { refreshPL(); });
+  });
+
+  document.getElementById('filter-clear').addEventListener('click', function () {
+    filterRegion.value = '';
+    filterOps.value = '';
+    filterJob.value = '';
+    filterAccount.value = '';
+    refreshPL();
+  });
+
   /* ── Data Loading ── */
   function loadData() {
     var xhr = new XMLHttpRequest();
@@ -90,7 +127,8 @@
         return;
       }
       try {
-        processData(JSON.parse(xhr.responseText));
+        var resp = JSON.parse(xhr.responseText);
+        initData(resp);
       } catch (e) {
         showError('Parse error: ' + e.message);
       }
@@ -105,44 +143,133 @@
       '<span style="color:#d32f2f;font-size:13px;">' + msg + '</span>';
   }
 
-  /* ── Process ── */
-  function processData(resp) {
+  /* ── Init: parse columns, populate filters, first render ── */
+  function initData(resp) {
     var cols = resp.columns;
-    var rows = resp.rows;
+    rawRows = resp.rows;
 
-    var iMonth  = cols.indexOf('MONTH');
-    var iAmount = cols.indexOf('AMOUNT');
-    var iSource = cols.indexOf('SOURCE');
-    var iCat    = cols.indexOf('P&L Category Name');
-    if (iCat === -1) iCat = cols.indexOf('PLCategoryName');
-    if (iAmount === -1) iAmount = cols.indexOf('Amount');
+    colIdx = {
+      month:  findCol(cols, ['MONTH', 'Month']),
+      amount: findCol(cols, ['AMOUNT', 'Amount']),
+      source: findCol(cols, ['SOURCE', 'Source']),
+      cat:    findCol(cols, ['P&L Category Name', 'PLCategoryName']),
+      region: findCol(cols, ['Region', 'region', 'REGION']),
+      job:    findCol(cols, ['JobNumber', 'Job Number']),
+      account:findCol(cols, ['ParentAccount', 'Parent Account']),
+      ops:    findCol(cols, ['OperationsLead', 'Operations Lead', 'OpsLead'])
+    };
 
-    if (iMonth === -1 || iAmount === -1 || iCat === -1) {
+    if (colIdx.month === -1 || colIdx.amount === -1 || colIdx.cat === -1) {
       showError('Missing columns. Found: ' + cols.join(', '));
       return;
     }
 
-    /* Separate actuals and forecast into different buckets */
-    var actData  = {};   // { cat: { mk: sum } }
-    var fcstData = {};   // { cat: { mk: sum } }
+    populateFilters();
+    refreshPL();
+  }
+
+  function findCol(cols, names) {
+    for (var i = 0; i < names.length; i++) {
+      var idx = cols.indexOf(names[i]);
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+
+  /* ── Populate filter dropdowns/datalists ── */
+  function populateFilters() {
+    var regions = {}, ops = {}, jobs = {}, accounts = {};
+    for (var r = 0; r < rawRows.length; r++) {
+      var row = rawRows[r];
+      var v;
+      if (colIdx.region !== -1) { v = row[colIdx.region]; if (v) regions[v] = true; }
+      if (colIdx.ops !== -1)    { v = row[colIdx.ops];    if (v) ops[v] = true; }
+      if (colIdx.job !== -1)    { v = row[colIdx.job];    if (v) jobs[v] = true; }
+      if (colIdx.account !== -1){ v = row[colIdx.account]; if (v) accounts[v] = true; }
+    }
+
+    fillSelect(filterRegion, Object.keys(regions).sort());
+    fillSelect(filterOps, Object.keys(ops).sort());
+    fillDatalist('job-list', Object.keys(jobs).sort());
+    fillDatalist('account-list', Object.keys(accounts).sort());
+  }
+
+  function fillSelect(el, values) {
+    values.forEach(function (v) {
+      var opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      el.appendChild(opt);
+    });
+  }
+
+  function fillDatalist(id, values) {
+    var dl = document.getElementById(id);
+    if (!dl) return;
+    values.forEach(function (v) {
+      var opt = document.createElement('option');
+      opt.value = v;
+      dl.appendChild(opt);
+    });
+  }
+
+  /* ── Get filtered rows ── */
+  function getFilteredRows() {
+    var rVal = filterRegion.value;
+    var oVal = filterOps.value;
+    var jVal = (filterJob.value || '').trim().toLowerCase();
+    var aVal = (filterAccount.value || '').trim().toLowerCase();
+
+    if (!rVal && !oVal && !jVal && !aVal) return rawRows;
+
+    return rawRows.filter(function (row) {
+      if (rVal && colIdx.region !== -1 && row[colIdx.region] !== rVal) return false;
+      if (oVal && colIdx.ops !== -1 && row[colIdx.ops] !== oVal) return false;
+      if (jVal && colIdx.job !== -1) {
+        var rowJob = (row[colIdx.job] || '').toString().toLowerCase();
+        if (rowJob.indexOf(jVal) === -1) return false;
+      }
+      if (aVal && colIdx.account !== -1) {
+        var rowAcct = (row[colIdx.account] || '').toString().toLowerCase();
+        if (rowAcct.indexOf(aVal) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  /* ── Refresh P&L ── */
+  function refreshPL() {
+    if (!rawRows) return;
+    var rows = getFilteredRows();
+    var result = aggregateRows(rows);
+    clearTable();
+    renderTable(result.displayRows, result.months, result.monthType, result.merged, result.computed);
+  }
+
+  /* ── Aggregate ── */
+  function aggregateRows(rows) {
+    var actData  = {};
+    var fcstData = {};
     var monthSet = {};
-    var monthActCount  = {};  // { mk: number of ACTUAL rows }
-    var monthFcstCount = {};  // { mk: number of GL_FORECAST rows }
+    var monthActCount  = {};
+    var monthFcstCount = {};
 
     for (var r = 0; r < rows.length; r++) {
       var row = rows[r];
-      var cat = row[iCat];
-      var rawMonth = row[iMonth];
-      var amt = parseFloat(row[iAmount]) || 0;
-      var src = iSource >= 0 ? (row[iSource] || '').trim().toUpperCase() : '';
+      var cat = row[colIdx.cat];
+      var rawMonth = row[colIdx.month];
+      var rawAmt = parseFloat(row[colIdx.amount]) || 0;
+      var src = colIdx.source >= 0 ? (row[colIdx.source] || '').trim().toUpperCase() : '';
 
       if (!cat || !rawMonth) continue;
 
       var mk = rawMonth.substring(0, 7);
-      if (mk.substring(0, 4) !== '2026') continue; // Filter to 2026 only
+      if (mk.substring(0, 4) !== '2026') continue;
+
+      /* Negate credit categories so they display positive */
+      var amt = CREDIT_CATS.indexOf(cat) !== -1 ? rawAmt * -1 : rawAmt;
 
       monthSet[mk] = true;
-
       var isActual = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS');
 
       if (isActual) {
@@ -158,16 +285,6 @@
 
     var months = Object.keys(monthSet).sort();
 
-    /* Diagnostic: show per-month source breakdown */
-    var diagParts = months.map(function (mk) {
-      return monthLabel(mk) + ':A' + (monthActCount[mk]||0) + '/F' + (monthFcstCount[mk]||0);
-    });
-    var diagEl = document.createElement('div');
-    diagEl.style.cssText = 'font-size:9px;font-family:monospace;padding:2px 8px;background:#f0f0f0;margin-bottom:2px;overflow:auto;white-space:nowrap;';
-    diagEl.textContent = diagParts.join(' | ');
-    document.getElementById('card-wrapper').insertBefore(diagEl, document.getElementById('table-wrapper'));
-
-    /* For each month: use ACT if actuals exist, else FCST */
     var monthType = {};
     months.forEach(function (mk) {
       monthType[mk] = monthActCount[mk] ? 'ACT' : 'FCST';
@@ -222,7 +339,7 @@
       computed['_niPct'][mk]        = rev !== 0 ? ni / rev : 0;
     });
 
-    /* Check for any categories not in our P&L structure */
+    /* Detect extra categories not in our P&L structure */
     var knownCats = {};
     PL_ROWS.forEach(function (r) { if (r[1] && r[1][0] !== '_') knownCats[r[1]] = true; });
     var extraCats = Object.keys(allCats).filter(function (c) { return !knownCats[c] && c; }).sort();
@@ -237,7 +354,25 @@
       });
     }
 
-    renderTable(displayRows, months, monthType, merged, computed);
+    return {
+      displayRows: displayRows,
+      months: months,
+      monthType: monthType,
+      merged: merged,
+      computed: computed
+    };
+  }
+
+  /* ── Clear table for re-render ── */
+  function clearTable() {
+    var table = document.getElementById('pl-table');
+    var thead = document.getElementById('pl-thead');
+    var tbody = document.getElementById('pl-tbody');
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+    /* Remove existing colgroup */
+    var cg = table.querySelector('colgroup');
+    if (cg) table.removeChild(cg);
   }
 
   /* ── Render ── */

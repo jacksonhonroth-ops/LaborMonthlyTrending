@@ -48,6 +48,85 @@ body {
   color: #2563a8;
 }
 
+/* ── Filter Bar ── */
+#filter-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: #f8f9fc;
+  border: 1px solid #e2e5ea;
+  border-radius: 6px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.filter-group label {
+  font-size: 9px;
+  font-weight: 600;
+  color: #8e99a4;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.filter-group select,
+.filter-group input[type="text"] {
+  padding: 5px 8px;
+  border: 1px solid #dce1e8;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #333;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+.filter-group select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E") no-repeat right 8px center;
+  padding-right: 24px;
+  cursor: pointer;
+}
+
+.filter-group input[type="text"]::placeholder { color: #aab; }
+
+.filter-group select:focus,
+.filter-group input[type="text"]:focus {
+  outline: none;
+  border-color: #2563a8;
+  box-shadow: 0 0 0 2px rgba(37, 99, 168, 0.12);
+}
+
+#filter-clear {
+  padding: 5px 12px;
+  border: 1px solid #dce1e8;
+  border-radius: 5px;
+  background: #fff;
+  font-size: 10px;
+  font-family: inherit;
+  font-weight: 600;
+  color: #8e99a4;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+#filter-clear:hover {
+  border-color: #d32f2f;
+  color: #d32f2f;
+  background: #fff5f5;
+}
+
 /* ── Table Wrapper ── */
 #table-wrapper {
   flex: 1;
