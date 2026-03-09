@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var DATA_ALIAS = 'dataset';
+  var DATA_ALIAS = 'gl_financials';
 
   /* ── P&L Structure ──
      [label, matchKey, type]
@@ -125,7 +125,7 @@
       .then(function (resp) { initData(resp); })
       .catch(function (err) {
         var msg = err && err.message ? err.message : JSON.stringify(err);
-        showError('Data load failed: ' + msg + ' — Map dataset 6c5e3f1b-56c4-4273-98ec-4af164645cfa with alias "dataset" in Pro Code settings.');
+        showError('Data load failed: ' + msg);
       });
   }
 
