@@ -7,11 +7,11 @@
   'use strict';
 
   var SQL_QUERY = "SELECT `MONTH`, `Region`, `SOURCE`, " +
-    "COALESCE(NULLIF(`P&L Category Name`, ''), `Metrics`) as `Category`, " +
+    "`P&L Category Name`, `Metrics`, " +
     "SUM(`AMOUNT`) as `AMOUNT` " +
     "FROM dataset " +
     "WHERE `SOURCE` IN ('ACTUAL', 'GL_FORECAST') " +
-    "GROUP BY `MONTH`, `Region`, `SOURCE`, `Category`";
+    "GROUP BY `MONTH`, `Region`, `SOURCE`, `P&L Category Name`, `Metrics`";
 
   /* ── P&L Structure ──
      [label, matchKey, type]
@@ -172,14 +172,15 @@
     rawRows = resp.rows;
 
     colIdx = {
-      month:  findCol(cols, ['MONTH', 'Month']),
-      amount: findCol(cols, ['AMOUNT', 'Amount']),
-      source: findCol(cols, ['SOURCE', 'Source']),
-      cat:    findCol(cols, ['Category', 'P&L Category Name', 'PLCategoryName']),
-      region: findCol(cols, ['Region', 'region', 'REGION'])
+      month:   findCol(cols, ['MONTH', 'Month']),
+      amount:  findCol(cols, ['AMOUNT', 'Amount']),
+      source:  findCol(cols, ['SOURCE', 'Source']),
+      cat:     findCol(cols, ['P&L Category Name', 'PLCategoryName']),
+      metrics: findCol(cols, ['Metrics', 'METRICS', 'Metric']),
+      region:  findCol(cols, ['Region', 'region', 'REGION'])
     };
 
-    if (colIdx.month === -1 || colIdx.amount === -1 || colIdx.cat === -1) {
+    if (colIdx.month === -1 || colIdx.amount === -1 || (colIdx.cat === -1 && colIdx.metrics === -1)) {
       showError('Missing columns. Found: ' + cols.join(', '));
       return;
     }
@@ -284,7 +285,9 @@
 
     for (var r = 0; r < rows.length; r++) {
       var row = rows[r];
-      var cat = row[colIdx.cat] || '';
+      /* Use P&L Category Name; fall back to Metrics if empty */
+      var cat = (colIdx.cat >= 0 && row[colIdx.cat]) ? row[colIdx.cat] : '';
+      if (!cat && colIdx.metrics >= 0) cat = row[colIdx.metrics] || '';
       if (CAT_MAP[cat]) cat = CAT_MAP[cat];
       var rawMonth = row[colIdx.month];
       var rawAmt = parseFloat(row[colIdx.amount]) || 0;
@@ -316,9 +319,29 @@
 
     var months = Object.keys(monthSet).sort();
 
+    console.log('[NatPL-SQL] Rows processed:', rows.length);
+    console.log('[NatPL-SQL] Months found:', months.join(', '));
     console.log('[NatPL-SQL] monthActCount:', JSON.stringify(monthActCount));
+    console.log('[NatPL-SQL] monthFcstCount:', JSON.stringify(monthFcstCount));
     console.log('[NatPL-SQL] ACTUAL cats:', JSON.stringify(Object.keys(actData)));
     console.log('[NatPL-SQL] FCST cats:', JSON.stringify(Object.keys(fcstData)));
+    /* Debug: show Jan actual Service Revenue to verify totals */
+    if (actData['Service Revenue'] && actData['Service Revenue']['2026-01']) {
+      console.log('[NatPL-SQL] Jan ACT Service Revenue:', actData['Service Revenue']['2026-01']);
+    }
+    if (fcstData['Service Revenue'] && fcstData['Service Revenue']['2026-04']) {
+      console.log('[NatPL-SQL] Apr FCST Service Revenue:', fcstData['Service Revenue']['2026-04']);
+    }
+    /* Debug: log first 5 skipped rows to see what categories are being dropped */
+    var skipped = {};
+    for (var s = 0; s < rows.length && Object.keys(skipped).length < 20; s++) {
+      var srow = rows[s];
+      var sc = (colIdx.cat >= 0 && srow[colIdx.cat]) ? srow[colIdx.cat] : '';
+      if (!sc && colIdx.metrics >= 0) sc = srow[colIdx.metrics] || '';
+      if (CAT_MAP[sc]) sc = CAT_MAP[sc];
+      if (sc && !VALID_CATS[sc]) skipped[sc] = (skipped[sc] || 0) + 1;
+    }
+    console.log('[NatPL-SQL] Skipped categories (sample):', JSON.stringify(skipped));
 
     var monthType = {};
     months.forEach(function (mk) {
