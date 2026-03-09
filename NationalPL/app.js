@@ -54,9 +54,8 @@
   var OPEX_CATS     = ['Field Overhead', 'HQ Overhead', 'Sales Overhead', 'Benefits & Taxes'];
   var OTHER_CATS    = ['Control Account', 'Income Taxes', 'Other Income/ Expense'];
 
-  /* Categories whose raw data is stored as negative (GL credit convention).
-     Set to empty — data appears to already be in presentation sign. */
-  var CREDIT_CATS   = [];
+  /* Categories stored as credits (negative) in ACTUALS only — forecast is already positive */
+  var CREDIT_CATS   = ['Service Revenue', 'Other Income/ Expense'];
 
   /* ── Formatting ── */
   function fmt(val) {
@@ -287,11 +286,12 @@
       var mk = rawMonth.substring(0, 7);
       if (mk.substring(0, 4) !== '2026') continue;
 
-      /* Negate credit categories so they display positive */
-      var amt = CREDIT_CATS.indexOf(cat) !== -1 ? rawAmt * -1 : rawAmt;
-
       monthSet[mk] = true;
       var isActual = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS');
+
+      /* Negate credit categories for ACTUALS only (GL convention); forecast already positive */
+      var isCredit = CREDIT_CATS.indexOf(cat) !== -1;
+      var amt = (isCredit && isActual) ? rawAmt * -1 : rawAmt;
 
       if (isActual) {
         if (!actData[cat]) actData[cat] = {};
