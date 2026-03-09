@@ -38,7 +38,6 @@
     [null,                   null,                   'spacer'],
 
     ['Other Income/Expense', null,                   'header'],
-    ['Control Account',      'Control Account',      'category'],
     ['Income Taxes',         'Income Taxes',         'category'],
     ['Other Income/ Expense','Other Income/ Expense','category'],
     ['Total Other',          '_totalOther',          'subtotal'],
@@ -52,15 +51,11 @@
   var REVENUE_CATS  = ['Service Revenue'];
   var COGS_CATS     = ['Total Labor', 'Contract Expenses', 'Supplies & Materials'];
   var OPEX_CATS     = ['Field Overhead', 'HQ Overhead', 'Sales Overhead', 'Benefits & Taxes'];
-  var OTHER_CATS    = ['Control Account', 'Income Taxes', 'Other Income/ Expense'];
+  var OTHER_CATS    = ['Income Taxes', 'Other Income/ Expense'];
 
   /* Categories stored as credits (negative) in ACTUALS only — forecast is already positive */
   var CREDIT_CATS   = ['Service Revenue', 'Other Income/ Expense'];
 
-  /* Map Metrics column names to P&L Category Names where they differ */
-  var METRICS_MAP = {
-    'Other Expense (Income)': 'Other Income/ Expense'
-  };
 
   /* ── Formatting ── */
   function fmt(val) {
@@ -171,11 +166,10 @@
       amount: findCol(cols, ['AMOUNT', 'Amount']),
       source: findCol(cols, ['SOURCE', 'Source']),
       cat:    findCol(cols, ['P&L Category Name', 'PLCategoryName']),
-      metrics: findCol(cols, ['Metrics', 'METRICS', 'Metric']),
       region: findCol(cols, ['Region', 'region', 'REGION'])
     };
 
-    if (colIdx.month === -1 || colIdx.amount === -1 || (colIdx.cat === -1 && colIdx.metrics === -1)) {
+    if (colIdx.month === -1 || colIdx.amount === -1 || colIdx.cat === -1) {
       showError('Missing columns. Found: ' + cols.join(', '));
       return;
     }
@@ -286,10 +280,7 @@
 
     for (var r = 0; r < rows.length; r++) {
       var row = rows[r];
-      /* P&L Category Name for forecast; Metrics as fallback for actuals */
-      var cat = (colIdx.cat >= 0 && row[colIdx.cat]) ? row[colIdx.cat] : '';
-      if (!cat && colIdx.metrics >= 0) cat = row[colIdx.metrics] || '';
-      if (METRICS_MAP[cat]) cat = METRICS_MAP[cat];
+      var cat = row[colIdx.cat] || '';
       var rawMonth = row[colIdx.month];
       var rawAmt = parseFloat(row[colIdx.amount]) || 0;
       var src = colIdx.source >= 0 ? (row[colIdx.source] || '').trim().toUpperCase() : '';
