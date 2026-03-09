@@ -7,8 +7,7 @@
 (function () {
   'use strict';
 
-  var SQL_URL = '/sql/v1/dataset';
-  var SQL_QUERY = "SELECT `MONTH`, `AMOUNT`, `P&L Category Name`, `SOURCE`, `Region` FROM dataset WHERE YEAR(`MONTH`) = 2026";
+  var DATA_URL = '/data/v1/dataset';
 
   /* ── P&L Structure ──
      [label, matchKey, type]
@@ -138,28 +137,18 @@
     }
   }
 
-  /* ── Data Loading (SQL query to filter server-side) ── */
+  /* ── Data Loading (via domo.js) ── */
   function loadData() {
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', SQL_URL, true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.setRequestHeader('Accept', 'application/json');
-    xhr.timeout = 120000;
-    xhr.onload = function () {
-      if (xhr.status !== 200) {
-        showError('HTTP ' + xhr.status + ': ' + xhr.responseText.substring(0, 200));
-        return;
-      }
-      try {
-        var resp = JSON.parse(xhr.responseText);
-        initData(resp);
-      } catch (e) {
-        showError('Parse error: ' + e.message);
-      }
-    };
-    xhr.onerror = function () { showError('Network error'); };
-    xhr.ontimeout = function () { showError('Timeout'); };
-    xhr.send(JSON.stringify({ sql: SQL_QUERY }));
+    if (typeof domo === 'undefined' || !domo.get) {
+      showError('domo.js not loaded');
+      return;
+    }
+    domo.get(DATA_URL, { format: 'array-of-arrays' })
+      .then(function (resp) { initData(resp); })
+      .catch(function (err) {
+        var msg = err && err.message ? err.message : JSON.stringify(err);
+        showError('Load error: ' + msg);
+      });
   }
 
   function showError(msg) {
