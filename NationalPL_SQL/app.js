@@ -13,6 +13,7 @@
     "AND `Metrics` IN ('Service Revenue','Total Labor','Contract Expenses'," +
     "'Supplies & Materials','Field Overhead','HQ Overhead','Sales Overhead'," +
     "'Benefits & Taxes','Income Taxes','Other Expense (Income)') " +
+    "AND `MonthlyAlloc` = 'Keep' " +
     "AND (`Metrics` = `P&L Category Name` " +
     "OR (`Metrics` = 'Other Expense (Income)' " +
     "AND `P&L Category Name` IN ('Other Income/ Expense','Control Account'))) " +
