@@ -189,23 +189,21 @@
       console.log('[NatPL] WARNING: SOURCE column not found!');
     }
 
-    /* Debug: log sample ACTUAL rows to check month format */
+    /* Debug: check 2026 ACTUAL rows specifically */
     if (colIdx.source >= 0) {
-      var actSamples = [];
-      var actMonths = {};
+      var act2026Samples = [];
+      var act2026CatCounts = {};
       for (var d = 0; d < rawRows.length; d++) {
         var sv2 = (rawRows[d][colIdx.source] || '').trim().toUpperCase();
-        if (sv2 === 'ACTUAL') {
-          if (actSamples.length < 3) actSamples.push(rawRows[d].slice(0));
-          var rm = rawRows[d][colIdx.month];
-          if (rm) {
-            var amk = ('' + rm).substring(0, 7);
-            actMonths[amk] = (actMonths[amk] || 0) + 1;
-          }
+        var rm2 = ('' + (rawRows[d][colIdx.month] || '')).substring(0, 4);
+        if (sv2 === 'ACTUAL' && rm2 === '2026') {
+          var c2 = rawRows[d][colIdx.cat] || '(empty)';
+          act2026CatCounts[c2] = (act2026CatCounts[c2] || 0) + 1;
+          if (act2026Samples.length < 5) act2026Samples.push(rawRows[d].slice(0));
         }
       }
-      console.log('[NatPL] ACTUAL sample rows:', JSON.stringify(actSamples));
-      console.log('[NatPL] ACTUAL months breakdown:', JSON.stringify(actMonths));
+      console.log('[NatPL] 2026 ACTUAL samples:', JSON.stringify(act2026Samples));
+      console.log('[NatPL] 2026 ACTUAL category counts:', JSON.stringify(act2026CatCounts));
     }
 
     populateFilters();
