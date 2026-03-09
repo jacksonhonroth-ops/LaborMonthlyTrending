@@ -54,8 +54,9 @@
   var OPEX_CATS     = ['Field Overhead', 'HQ Overhead', 'Sales Overhead', 'Benefits & Taxes'];
   var OTHER_CATS    = ['Control Account', 'Income Taxes', 'Other Income/ Expense'];
 
-  /* Categories stored as credits (negative in GL) — negate to show positive */
-  var CREDIT_CATS   = ['Service Revenue', 'Other Income/ Expense'];
+  /* Categories whose raw data is stored as negative (GL credit convention).
+     Set to empty — data appears to already be in presentation sign. */
+  var CREDIT_CATS   = [];
 
   /* ── Formatting ── */
   function fmt(val) {
