@@ -7,12 +7,16 @@
   'use strict';
 
   var SQL_QUERY = "SELECT `MONTH`, `Region`, `Column` as `SOURCE`, " +
-    "`P&L Category Name`, `Metrics`, " +
-    "SUM(`AMOUNT`) as `AMOUNT` " +
+    "`Metrics`, SUM(`AMOUNT`) as `AMOUNT` " +
     "FROM dataset " +
     "WHERE `Column` IN ('ACTUAL', 'GL_FORECAST') " +
-    "AND `MonthlyAlloc` = 'Keep' " +
-    "GROUP BY `MONTH`, `Region`, `Column`, `P&L Category Name`, `Metrics`";
+    "AND `Metrics` IN ('Service Revenue','Total Labor','Contract Expenses'," +
+    "'Supplies & Materials','Field Overhead','HQ Overhead','Sales Overhead'," +
+    "'Benefits & Taxes','Income Taxes','Other Expense (Income)') " +
+    "AND (`Metrics` = `P&L Category Name` " +
+    "OR (`Metrics` = 'Other Expense (Income)' " +
+    "AND `P&L Category Name` IN ('Other Income/ Expense','Control Account'))) " +
+    "GROUP BY `MONTH`, `Region`, `Column`, `Metrics`";
 
   /* ── P&L Structure ──
      [label, matchKey, type]
