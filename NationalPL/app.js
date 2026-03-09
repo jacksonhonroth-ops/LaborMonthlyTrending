@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var DATA_URL = '/data/v1/dataset?limit=500000';
+  var DATA_URL = '/data/v1/dataset';
 
   /* ── P&L Structure ──
      [label, matchKey, type]
