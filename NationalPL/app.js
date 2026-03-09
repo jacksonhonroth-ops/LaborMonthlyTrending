@@ -321,6 +321,9 @@
 
     var months = Object.keys(monthSet).sort();
 
+    console.log('[NatPL] monthActCount:', JSON.stringify(monthActCount));
+    console.log('[NatPL] monthFcstCount:', JSON.stringify(monthFcstCount));
+
     var monthType = {};
     months.forEach(function (mk) {
       monthType[mk] = monthActCount[mk] ? 'ACT' : 'FCST';
@@ -375,20 +378,7 @@
       computed['_niPct'][mk]        = rev !== 0 ? ni / rev : 0;
     });
 
-    /* Detect extra categories not in our P&L structure */
-    var knownCats = {};
-    PL_ROWS.forEach(function (r) { if (r[1] && r[1][0] !== '_') knownCats[r[1]] = true; });
-    var extraCats = Object.keys(allCats).filter(function (c) { return !knownCats[c] && c; }).sort();
-
     var displayRows = PL_ROWS.slice();
-    if (extraCats.length > 0) {
-      var niIdx = displayRows.findIndex(function (r) { return r[1] === '_netIncome'; });
-      displayRows.splice(niIdx, 0, [null, null, 'spacer'], ['Unclassified', null, 'header']);
-      niIdx += 2;
-      extraCats.forEach(function (c, i) {
-        displayRows.splice(niIdx + i, 0, [c, c, 'category']);
-      });
-    }
 
     return {
       displayRows: displayRows,
