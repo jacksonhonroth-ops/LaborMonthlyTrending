@@ -87,31 +87,12 @@
   var colIdx = null;
 
   /* ── Filter elements ── */
-  var filterRegion  = document.getElementById('filter-region');
-  var filterOps     = document.getElementById('filter-ops');
-  var filterJob     = document.getElementById('filter-job');
-  var filterAccount = document.getElementById('filter-account');
+  var filterRegion = document.getElementById('filter-region');
 
-  /* Dropdown change listeners */
-  [filterRegion, filterOps].forEach(function (el) {
-    el.addEventListener('change', function () { refreshPL(); });
-  });
-
-  /* Search input listeners (debounced) */
-  var searchTimer = null;
-  [filterJob, filterAccount].forEach(function (el) {
-    el.addEventListener('input', function () {
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(function () { refreshPL(); }, 300);
-    });
-    el.addEventListener('change', function () { refreshPL(); });
-  });
+  filterRegion.addEventListener('change', function () { refreshPL(); });
 
   document.getElementById('filter-clear').addEventListener('click', function () {
     filterRegion.value = '';
-    filterOps.value = '';
-    filterJob.value = '';
-    filterAccount.value = '';
     refreshPL();
   });
 
@@ -153,10 +134,7 @@
       amount: findCol(cols, ['AMOUNT', 'Amount']),
       source: findCol(cols, ['SOURCE', 'Source']),
       cat:    findCol(cols, ['P&L Category Name', 'PLCategoryName']),
-      region: findCol(cols, ['Region', 'region', 'REGION']),
-      job:    findCol(cols, ['JobNumber', 'Job Number']),
-      account:findCol(cols, ['ParentAccount', 'Parent Account']),
-      ops:    findCol(cols, ['OperationsLead', 'Operations Lead', 'OpsLead'])
+      region: findCol(cols, ['Region', 'region', 'REGION'])
     };
 
     if (colIdx.month === -1 || colIdx.amount === -1 || colIdx.cat === -1) {
@@ -176,64 +154,28 @@
     return -1;
   }
 
-  /* ── Populate filter dropdowns/datalists ── */
+  /* ── Populate filter dropdowns ── */
   function populateFilters() {
-    var regions = {}, ops = {}, jobs = {}, accounts = {};
+    var regions = {};
     for (var r = 0; r < rawRows.length; r++) {
-      var row = rawRows[r];
       var v;
-      if (colIdx.region !== -1) { v = row[colIdx.region]; if (v) regions[v] = true; }
-      if (colIdx.ops !== -1)    { v = row[colIdx.ops];    if (v) ops[v] = true; }
-      if (colIdx.job !== -1)    { v = row[colIdx.job];    if (v) jobs[v] = true; }
-      if (colIdx.account !== -1){ v = row[colIdx.account]; if (v) accounts[v] = true; }
+      if (colIdx.region !== -1) { v = rawRows[r][colIdx.region]; if (v) regions[v] = true; }
     }
-
-    fillSelect(filterRegion, Object.keys(regions).sort());
-    fillSelect(filterOps, Object.keys(ops).sort());
-    fillDatalist('job-list', Object.keys(jobs).sort());
-    fillDatalist('account-list', Object.keys(accounts).sort());
-  }
-
-  function fillSelect(el, values) {
-    values.forEach(function (v) {
+    Object.keys(regions).sort().forEach(function (v) {
       var opt = document.createElement('option');
       opt.value = v;
       opt.textContent = v;
-      el.appendChild(opt);
-    });
-  }
-
-  function fillDatalist(id, values) {
-    var dl = document.getElementById(id);
-    if (!dl) return;
-    values.forEach(function (v) {
-      var opt = document.createElement('option');
-      opt.value = v;
-      dl.appendChild(opt);
+      filterRegion.appendChild(opt);
     });
   }
 
   /* ── Get filtered rows ── */
   function getFilteredRows() {
     var rVal = filterRegion.value;
-    var oVal = filterOps.value;
-    var jVal = (filterJob.value || '').trim().toLowerCase();
-    var aVal = (filterAccount.value || '').trim().toLowerCase();
-
-    if (!rVal && !oVal && !jVal && !aVal) return rawRows;
+    if (!rVal) return rawRows;
 
     return rawRows.filter(function (row) {
-      if (rVal && colIdx.region !== -1 && row[colIdx.region] !== rVal) return false;
-      if (oVal && colIdx.ops !== -1 && row[colIdx.ops] !== oVal) return false;
-      if (jVal && colIdx.job !== -1) {
-        var rowJob = (row[colIdx.job] || '').toString().toLowerCase();
-        if (rowJob.indexOf(jVal) === -1) return false;
-      }
-      if (aVal && colIdx.account !== -1) {
-        var rowAcct = (row[colIdx.account] || '').toString().toLowerCase();
-        if (rowAcct.indexOf(aVal) === -1) return false;
-      }
-      return true;
+      return colIdx.region === -1 || row[colIdx.region] === rVal;
     });
   }
 
