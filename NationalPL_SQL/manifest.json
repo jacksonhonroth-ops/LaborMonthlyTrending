@@ -3,7 +3,7 @@
    "version": "0.0.3",
    "datasetsMapping": [
       {
-         "dataSetId": "6c5e3f1b-56c4-4273-98ec-4af164645cfa",
+         "dataSetId": "40d26382-91ce-4a24-92f6-8baf8fb7693a",
          "alias": "dataset",
          "fields": [
             { "alias": "MONTH", "columnName": "MONTH" },
@@ -11,8 +11,7 @@
             { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
             { "alias": "SOURCE", "columnName": "SOURCE" },
             { "alias": "Region", "columnName": "Region" },
-            { "alias": "Metrics", "columnName": "Metrics" },
-            { "alias": "Column", "columnName": "Column" }
+            { "alias": "Metrics", "columnName": "Metrics" }
          ]
       }
    ],
