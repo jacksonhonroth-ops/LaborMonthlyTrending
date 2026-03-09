@@ -86,15 +86,56 @@
   var rawRows = null;
   var colIdx = null;
 
-  /* ── Filter elements ── */
-  var filterRegion = document.getElementById('filter-region');
+  /* ── Multi-select Region filter ── */
+  var selectedRegions = {};  /* region -> true/false */
+  var allRegions = [];
+  var regionToggle = document.getElementById('region-toggle');
+  var regionDropdown = document.getElementById('region-dropdown');
 
-  filterRegion.addEventListener('change', function () { refreshPL(); });
+  /* Toggle dropdown open/close */
+  regionToggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = !regionDropdown.classList.contains('hidden');
+    regionDropdown.classList.toggle('hidden');
+    regionToggle.classList.toggle('open');
+    if (open) refreshPL(); /* re-render when closing */
+  });
+
+  /* Close dropdown when clicking outside */
+  document.addEventListener('click', function (e) {
+    if (!document.getElementById('region-multi').contains(e.target)) {
+      if (!regionDropdown.classList.contains('hidden')) {
+        regionDropdown.classList.add('hidden');
+        regionToggle.classList.remove('open');
+        refreshPL();
+      }
+    }
+  });
 
   document.getElementById('filter-clear').addEventListener('click', function () {
-    filterRegion.value = '';
+    allRegions.forEach(function (r) { selectedRegions[r] = true; });
+    syncRegionCheckboxes();
+    updateRegionLabel();
     refreshPL();
   });
+
+  function syncRegionCheckboxes() {
+    var boxes = regionDropdown.querySelectorAll('input[type="checkbox"]');
+    boxes.forEach(function (cb) { cb.checked = !!selectedRegions[cb.value]; });
+  }
+
+  function updateRegionLabel() {
+    var sel = allRegions.filter(function (r) { return selectedRegions[r]; });
+    if (sel.length === 0) {
+      regionToggle.textContent = 'None selected';
+    } else if (sel.length === allRegions.length) {
+      regionToggle.textContent = 'All Regions';
+    } else if (sel.length <= 3) {
+      regionToggle.textContent = sel.join(', ');
+    } else {
+      regionToggle.textContent = sel.length + ' of ' + allRegions.length + ' regions';
+    }
+  }
 
   /* ── Data Loading ── */
   function loadData() {
@@ -154,28 +195,74 @@
     return -1;
   }
 
-  /* ── Populate filter dropdowns ── */
+  /* ── Populate region multi-select ── */
   function populateFilters() {
-    var regions = {};
-    for (var r = 0; r < rawRows.length; r++) {
-      var v;
-      if (colIdx.region !== -1) { v = rawRows[r][colIdx.region]; if (v) regions[v] = true; }
+    var regionSet = {};
+    if (colIdx.region !== -1) {
+      for (var r = 0; r < rawRows.length; r++) {
+        var v = rawRows[r][colIdx.region];
+        if (v) regionSet[v] = true;
+      }
     }
-    Object.keys(regions).sort().forEach(function (v) {
-      var opt = document.createElement('option');
-      opt.value = v;
-      opt.textContent = v;
-      filterRegion.appendChild(opt);
+    allRegions = Object.keys(regionSet).sort();
+
+    /* Default: all selected EXCEPT HQ */
+    allRegions.forEach(function (r) {
+      selectedRegions[r] = r.toUpperCase() !== 'HQ';
     });
+
+    /* Build dropdown: Select All / Deselect All buttons + checkboxes */
+    var actionsDiv = document.createElement('div');
+    actionsDiv.className = 'multi-select-actions';
+    var btnAll = document.createElement('button');
+    btnAll.textContent = 'Select All';
+    btnAll.addEventListener('click', function (e) {
+      e.stopPropagation();
+      allRegions.forEach(function (r) { selectedRegions[r] = true; });
+      syncRegionCheckboxes();
+      updateRegionLabel();
+    });
+    var btnNone = document.createElement('button');
+    btnNone.textContent = 'Deselect All';
+    btnNone.addEventListener('click', function (e) {
+      e.stopPropagation();
+      allRegions.forEach(function (r) { selectedRegions[r] = false; });
+      syncRegionCheckboxes();
+      updateRegionLabel();
+    });
+    actionsDiv.appendChild(btnAll);
+    actionsDiv.appendChild(btnNone);
+    regionDropdown.appendChild(actionsDiv);
+
+    allRegions.forEach(function (rgn) {
+      var lbl = document.createElement('label');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = rgn;
+      cb.checked = selectedRegions[rgn];
+      cb.addEventListener('change', function (e) {
+        e.stopPropagation();
+        selectedRegions[rgn] = cb.checked;
+        updateRegionLabel();
+      });
+      lbl.appendChild(cb);
+      lbl.appendChild(document.createTextNode(rgn));
+      regionDropdown.appendChild(lbl);
+    });
+
+    updateRegionLabel();
   }
 
   /* ── Get filtered rows ── */
   function getFilteredRows() {
-    var rVal = filterRegion.value;
-    if (!rVal) return rawRows;
+    if (colIdx.region === -1) return rawRows;
+
+    /* Check if all selected — skip filtering */
+    var allSelected = allRegions.every(function (r) { return selectedRegions[r]; });
+    if (allSelected) return rawRows;
 
     return rawRows.filter(function (row) {
-      return colIdx.region === -1 || row[colIdx.region] === rVal;
+      return !!selectedRegions[row[colIdx.region]];
     });
   }
 

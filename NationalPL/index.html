@@ -18,8 +18,11 @@
     </div>
     <div id="filter-bar">
       <div class="filter-group">
-        <label for="filter-region">Region</label>
-        <select id="filter-region"><option value="">All</option></select>
+        <label>Region</label>
+        <div id="region-multi" class="multi-select">
+          <div class="multi-select-toggle" id="region-toggle">Select regions&hellip;</div>
+          <div class="multi-select-dropdown hidden" id="region-dropdown"></div>
+        </div>
       </div>
       <button id="filter-clear">Clear</button>
     </div>
