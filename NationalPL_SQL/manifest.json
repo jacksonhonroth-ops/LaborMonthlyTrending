@@ -8,8 +8,7 @@
          "fields": [
             { "alias": "MONTH", "columnName": "MONTH" },
             { "alias": "AMOUNT", "columnName": "AMOUNT" },
-            { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
-            { "alias": "SOURCE", "columnName": "SOURCE" },
+            { "alias": "P&L Category Name", "columnName": "P&L Category Name" },
             { "alias": "Region", "columnName": "Region" },
             { "alias": "Metrics", "columnName": "Metrics" },
             { "alias": "Column", "columnName": "Column" }
