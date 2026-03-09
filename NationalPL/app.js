@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var DATA_URL = '/data/v1/dataset?limit=500000';
+  var DATA_ALIAS = 'dataset';
 
   /* ── P&L Structure ──
      [label, matchKey, type]
@@ -115,27 +115,15 @@
     refreshPL();
   });
 
-  /* ── Data Loading ── */
+  /* ── Data Loading (via domo.js / ryuu) ── */
   function loadData() {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', DATA_URL, true);
-    xhr.setRequestHeader('Accept', 'application/json');
-    xhr.timeout = 60000;
-    xhr.onload = function () {
-      if (xhr.status !== 200) {
-        showError('HTTP ' + xhr.status);
-        return;
-      }
-      try {
-        var resp = JSON.parse(xhr.responseText);
+    domo.get('/data/v1/' + DATA_ALIAS, { format: 'array-of-arrays' })
+      .then(function (resp) {
         initData(resp);
-      } catch (e) {
-        showError('Parse error: ' + e.message);
-      }
-    };
-    xhr.onerror = function () { showError('Network error'); };
-    xhr.ontimeout = function () { showError('Timeout – dataset may be too large'); };
-    xhr.send();
+      })
+      .catch(function (err) {
+        showError('Data error: ' + (err.message || err));
+      });
   }
 
   function showError(msg) {
