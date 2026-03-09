@@ -189,6 +189,25 @@
       console.log('[NatPL] WARNING: SOURCE column not found!');
     }
 
+    /* Debug: log sample ACTUAL rows to check month format */
+    if (colIdx.source >= 0) {
+      var actSamples = [];
+      var actMonths = {};
+      for (var d = 0; d < rawRows.length; d++) {
+        var sv2 = (rawRows[d][colIdx.source] || '').trim().toUpperCase();
+        if (sv2 === 'ACTUAL') {
+          if (actSamples.length < 3) actSamples.push(rawRows[d].slice(0));
+          var rm = rawRows[d][colIdx.month];
+          if (rm) {
+            var amk = ('' + rm).substring(0, 7);
+            actMonths[amk] = (actMonths[amk] || 0) + 1;
+          }
+        }
+      }
+      console.log('[NatPL] ACTUAL sample rows:', JSON.stringify(actSamples));
+      console.log('[NatPL] ACTUAL months breakdown:', JSON.stringify(actMonths));
+    }
+
     populateFilters();
     refreshPL();
   }
