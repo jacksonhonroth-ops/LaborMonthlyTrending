@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var DATA_URL = '/data/v1/dataset?limit=500000';
+  var DATA_URL = '/data/v1/dataset?filter=YEAR=2026';
 
   /* ── P&L Structure ──
      [label, matchKey, type]
@@ -86,56 +86,69 @@
   var rawRows = null;
   var colIdx = null;
 
-  /* ── Filter elements ── */
-  var filterRegion  = document.getElementById('filter-region');
-  var filterOps     = document.getElementById('filter-ops');
-  var filterJob     = document.getElementById('filter-job');
-  var filterAccount = document.getElementById('filter-account');
+  /* ── Multi-select Region filter ── */
+  var selectedRegions = {};  /* region -> true/false */
+  var allRegions = [];
+  var regionToggle = document.getElementById('region-toggle');
+  var regionDropdown = document.getElementById('region-dropdown');
 
-  /* Dropdown change listeners */
-  [filterRegion, filterOps].forEach(function (el) {
-    el.addEventListener('change', function () { refreshPL(); });
+  /* Toggle dropdown open/close */
+  regionToggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = !regionDropdown.classList.contains('hidden');
+    regionDropdown.classList.toggle('hidden');
+    regionToggle.classList.toggle('open');
+    if (open) refreshPL(); /* re-render when closing */
   });
 
-  /* Search input listeners (debounced) */
-  var searchTimer = null;
-  [filterJob, filterAccount].forEach(function (el) {
-    el.addEventListener('input', function () {
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(function () { refreshPL(); }, 300);
-    });
-    el.addEventListener('change', function () { refreshPL(); });
+  /* Close dropdown when clicking outside */
+  document.addEventListener('click', function (e) {
+    if (!document.getElementById('region-multi').contains(e.target)) {
+      if (!regionDropdown.classList.contains('hidden')) {
+        regionDropdown.classList.add('hidden');
+        regionToggle.classList.remove('open');
+        refreshPL();
+      }
+    }
   });
 
   document.getElementById('filter-clear').addEventListener('click', function () {
-    filterRegion.value = '';
-    filterOps.value = '';
-    filterJob.value = '';
-    filterAccount.value = '';
+    allRegions.forEach(function (r) { selectedRegions[r] = true; });
+    syncRegionCheckboxes();
+    updateRegionLabel();
     refreshPL();
   });
 
-  /* ── Data Loading ── */
+  function syncRegionCheckboxes() {
+    var boxes = regionDropdown.querySelectorAll('input[type="checkbox"]');
+    boxes.forEach(function (cb) { cb.checked = !!selectedRegions[cb.value]; });
+  }
+
+  function updateRegionLabel() {
+    var sel = allRegions.filter(function (r) { return selectedRegions[r]; });
+    if (sel.length === 0) {
+      regionToggle.textContent = 'None selected';
+    } else if (sel.length === allRegions.length) {
+      regionToggle.textContent = 'All Regions';
+    } else if (sel.length <= 3) {
+      regionToggle.textContent = sel.join(', ');
+    } else {
+      regionToggle.textContent = sel.length + ' of ' + allRegions.length + ' regions';
+    }
+  }
+
+  /* ── Data Loading (via domo.js) ── */
   function loadData() {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', DATA_URL, true);
-    xhr.setRequestHeader('Accept', 'application/json');
-    xhr.timeout = 60000;
-    xhr.onload = function () {
-      if (xhr.status !== 200) {
-        showError('HTTP ' + xhr.status);
-        return;
-      }
-      try {
-        var resp = JSON.parse(xhr.responseText);
-        initData(resp);
-      } catch (e) {
-        showError('Parse error: ' + e.message);
-      }
-    };
-    xhr.onerror = function () { showError('Network error'); };
-    xhr.ontimeout = function () { showError('Timeout – dataset may be too large'); };
-    xhr.send();
+    if (typeof domo === 'undefined' || !domo.get) {
+      showError('domo.js not loaded');
+      return;
+    }
+    domo.get(DATA_URL, { format: 'array-of-arrays' })
+      .then(function (resp) { initData(resp); })
+      .catch(function (err) {
+        var msg = err && err.message ? err.message : JSON.stringify(err);
+        showError('Load error: ' + msg);
+      });
   }
 
   function showError(msg) {
@@ -153,10 +166,7 @@
       amount: findCol(cols, ['AMOUNT', 'Amount']),
       source: findCol(cols, ['SOURCE', 'Source']),
       cat:    findCol(cols, ['P&L Category Name', 'PLCategoryName']),
-      region: findCol(cols, ['Region', 'region', 'REGION']),
-      job:    findCol(cols, ['JobNumber', 'Job Number']),
-      account:findCol(cols, ['ParentAccount', 'Parent Account']),
-      ops:    findCol(cols, ['OperationsLead', 'Operations Lead', 'OpsLead'])
+      region: findCol(cols, ['Region', 'region', 'REGION'])
     };
 
     if (colIdx.month === -1 || colIdx.amount === -1 || colIdx.cat === -1) {
@@ -176,64 +186,74 @@
     return -1;
   }
 
-  /* ── Populate filter dropdowns/datalists ── */
+  /* ── Populate region multi-select ── */
   function populateFilters() {
-    var regions = {}, ops = {}, jobs = {}, accounts = {};
-    for (var r = 0; r < rawRows.length; r++) {
-      var row = rawRows[r];
-      var v;
-      if (colIdx.region !== -1) { v = row[colIdx.region]; if (v) regions[v] = true; }
-      if (colIdx.ops !== -1)    { v = row[colIdx.ops];    if (v) ops[v] = true; }
-      if (colIdx.job !== -1)    { v = row[colIdx.job];    if (v) jobs[v] = true; }
-      if (colIdx.account !== -1){ v = row[colIdx.account]; if (v) accounts[v] = true; }
+    var regionSet = {};
+    if (colIdx.region !== -1) {
+      for (var r = 0; r < rawRows.length; r++) {
+        var v = rawRows[r][colIdx.region];
+        if (v) regionSet[v] = true;
+      }
     }
+    allRegions = Object.keys(regionSet).sort();
 
-    fillSelect(filterRegion, Object.keys(regions).sort());
-    fillSelect(filterOps, Object.keys(ops).sort());
-    fillDatalist('job-list', Object.keys(jobs).sort());
-    fillDatalist('account-list', Object.keys(accounts).sort());
-  }
-
-  function fillSelect(el, values) {
-    values.forEach(function (v) {
-      var opt = document.createElement('option');
-      opt.value = v;
-      opt.textContent = v;
-      el.appendChild(opt);
+    /* Default: all selected EXCEPT HQ */
+    allRegions.forEach(function (r) {
+      selectedRegions[r] = r.toUpperCase() !== 'HQ';
     });
-  }
 
-  function fillDatalist(id, values) {
-    var dl = document.getElementById(id);
-    if (!dl) return;
-    values.forEach(function (v) {
-      var opt = document.createElement('option');
-      opt.value = v;
-      dl.appendChild(opt);
+    /* Build dropdown: Select All / Deselect All buttons + checkboxes */
+    var actionsDiv = document.createElement('div');
+    actionsDiv.className = 'multi-select-actions';
+    var btnAll = document.createElement('button');
+    btnAll.textContent = 'Select All';
+    btnAll.addEventListener('click', function (e) {
+      e.stopPropagation();
+      allRegions.forEach(function (r) { selectedRegions[r] = true; });
+      syncRegionCheckboxes();
+      updateRegionLabel();
     });
+    var btnNone = document.createElement('button');
+    btnNone.textContent = 'Deselect All';
+    btnNone.addEventListener('click', function (e) {
+      e.stopPropagation();
+      allRegions.forEach(function (r) { selectedRegions[r] = false; });
+      syncRegionCheckboxes();
+      updateRegionLabel();
+    });
+    actionsDiv.appendChild(btnAll);
+    actionsDiv.appendChild(btnNone);
+    regionDropdown.appendChild(actionsDiv);
+
+    allRegions.forEach(function (rgn) {
+      var lbl = document.createElement('label');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = rgn;
+      cb.checked = selectedRegions[rgn];
+      cb.addEventListener('change', function (e) {
+        e.stopPropagation();
+        selectedRegions[rgn] = cb.checked;
+        updateRegionLabel();
+      });
+      lbl.appendChild(cb);
+      lbl.appendChild(document.createTextNode(rgn));
+      regionDropdown.appendChild(lbl);
+    });
+
+    updateRegionLabel();
   }
 
   /* ── Get filtered rows ── */
   function getFilteredRows() {
-    var rVal = filterRegion.value;
-    var oVal = filterOps.value;
-    var jVal = (filterJob.value || '').trim().toLowerCase();
-    var aVal = (filterAccount.value || '').trim().toLowerCase();
+    if (colIdx.region === -1) return rawRows;
 
-    if (!rVal && !oVal && !jVal && !aVal) return rawRows;
+    /* Check if all selected — skip filtering */
+    var allSelected = allRegions.every(function (r) { return selectedRegions[r]; });
+    if (allSelected) return rawRows;
 
     return rawRows.filter(function (row) {
-      if (rVal && colIdx.region !== -1 && row[colIdx.region] !== rVal) return false;
-      if (oVal && colIdx.ops !== -1 && row[colIdx.ops] !== oVal) return false;
-      if (jVal && colIdx.job !== -1) {
-        var rowJob = (row[colIdx.job] || '').toString().toLowerCase();
-        if (rowJob.indexOf(jVal) === -1) return false;
-      }
-      if (aVal && colIdx.account !== -1) {
-        var rowAcct = (row[colIdx.account] || '').toString().toLowerCase();
-        if (rowAcct.indexOf(aVal) === -1) return false;
-      }
-      return true;
+      return !!selectedRegions[row[colIdx.region]];
     });
   }
 
