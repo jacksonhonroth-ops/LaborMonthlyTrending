@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var DATA_URL = '/data/v1/dataset';
+  var DATA_URL = '/data/v1/dataset?filter=YEAR=2026';
 
   /* ── P&L Structure ──
      [label, matchKey, type]
