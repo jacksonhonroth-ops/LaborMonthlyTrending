@@ -1,13 +1,22 @@
 /* ================================================================
-   National P&L – DOMO Phoenix Pro Code Card
-   Fetches via /data/v1/dataset?limit=N (ryuu columnar format)
+   National P&L – DOMO Phoenix Pro Code Card (SQL Version)
+   Uses server-side SQL aggregation via domo.post('/sql/v1/dataset')
    SOURCE: ACTUAL = actuals, GL_FORECAST = forecast
-   Filters: Region, Ops Lead, Job Number, Parent Account
    ================================================================ */
 (function () {
   'use strict';
 
-  var DATA_URL = '/data/v1/dataset?limit=5000000';
+  var SQL_QUERY = "SELECT `MONTH`, `Region`, `Column` as `SOURCE`, " +
+    "`Metrics`, SUM(`AMOUNT`) as `AMOUNT` " +
+    "FROM dataset " +
+    "WHERE `Column` IN ('ACTUAL', 'GL_FORECAST') " +
+    "AND `Metrics` IN ('Service Revenue','Total Labor','Contract Expenses'," +
+    "'Supplies & Materials','Field Overhead','HQ Overhead','Sales Overhead'," +
+    "'Benefits & Taxes','Income Taxes','Other Expense (Income)') " +
+    "AND (`Metrics` = `P&L Category Name` " +
+    "OR (`Metrics` = 'Other Expense (Income)' " +
+    "AND `P&L Category Name` IN ('Other Income/ Expense','Control Account'))) " +
+    "GROUP BY `MONTH`, `Region`, `Column`, `Metrics`";
 
   /* ── P&L Structure ──
      [label, matchKey, type]
@@ -57,7 +66,7 @@
   var CREDIT_CATS   = ['Service Revenue', 'Other Income/ Expense'];
 
   /* Map Metrics names to P&L Category Names where they differ */
-  var METRICS_MAP = {
+  var CAT_MAP = {
     'Other Expense (Income)': 'Other Income/ Expense'
   };
 
@@ -95,21 +104,19 @@
   var colIdx = null;
 
   /* ── Multi-select Region filter ── */
-  var selectedRegions = {};  /* region -> true/false */
+  var selectedRegions = {};
   var allRegions = [];
   var regionToggle = document.getElementById('region-toggle');
   var regionDropdown = document.getElementById('region-dropdown');
 
-  /* Toggle dropdown open/close */
   regionToggle.addEventListener('click', function (e) {
     e.stopPropagation();
     var open = !regionDropdown.classList.contains('hidden');
     regionDropdown.classList.toggle('hidden');
     regionToggle.classList.toggle('open');
-    if (open) refreshPL(); /* re-render when closing */
+    if (open) refreshPL();
   });
 
-  /* Close dropdown when clicking outside */
   document.addEventListener('click', function (e) {
     if (!document.getElementById('region-multi').contains(e.target)) {
       if (!regionDropdown.classList.contains('hidden')) {
@@ -145,17 +152,17 @@
     }
   }
 
-  /* ── Data Loading (via domo.js) ── */
+  /* ── Data Loading (SQL aggregation via domo.post) ── */
   function loadData() {
-    if (typeof domo === 'undefined' || !domo.get) {
+    if (typeof domo === 'undefined' || !domo.post) {
       showError('domo.js not loaded');
       return;
     }
-    domo.get(DATA_URL, { format: 'array-of-arrays' })
+    domo.post('/sql/v1/dataset', SQL_QUERY, { contentType: 'text/plain' })
       .then(function (resp) { initData(resp); })
       .catch(function (err) {
         var msg = err && err.message ? err.message : JSON.stringify(err);
-        showError('Load error: ' + msg);
+        showError('SQL error: ' + msg);
       });
   }
 
@@ -183,9 +190,8 @@
       return;
     }
 
-    console.log('[NatPL] Columns:', cols);
-    console.log('[NatPL] colIdx:', JSON.stringify(colIdx));
-    console.log('[NatPL] Total rows:', rawRows.length);
+    console.log('[NatPL-SQL] Columns:', cols);
+    console.log('[NatPL-SQL] Total rows:', rawRows.length);
 
     populateFilters();
     refreshPL();
@@ -210,12 +216,10 @@
     }
     allRegions = Object.keys(regionSet).sort();
 
-    /* Default: all selected EXCEPT HQ */
     allRegions.forEach(function (r) {
       selectedRegions[r] = r.toUpperCase() !== 'HQ';
     });
 
-    /* Build dropdown: Select All / Deselect All buttons + checkboxes */
     var actionsDiv = document.createElement('div');
     actionsDiv.className = 'multi-select-actions';
     var btnAll = document.createElement('button');
@@ -260,11 +264,8 @@
   /* ── Get filtered rows ── */
   function getFilteredRows() {
     if (colIdx.region === -1) return rawRows;
-
-    /* Check if all selected — skip filtering */
     var allSelected = allRegions.every(function (r) { return selectedRegions[r]; });
     if (allSelected) return rawRows;
-
     return rawRows.filter(function (row) {
       return !!selectedRegions[row[colIdx.region]];
     });
@@ -279,7 +280,7 @@
     renderTable(result.displayRows, result.months, result.monthType, result.merged, result.computed);
   }
 
-  /* ── Aggregate ── */
+  /* ── Aggregate (data is pre-aggregated by SQL, just pivot here) ── */
   function aggregateRows(rows) {
     var actData  = {};
     var fcstData = {};
@@ -292,22 +293,17 @@
       /* Use P&L Category Name; fall back to Metrics if empty */
       var cat = (colIdx.cat >= 0 && row[colIdx.cat]) ? row[colIdx.cat] : '';
       if (!cat && colIdx.metrics >= 0) cat = row[colIdx.metrics] || '';
-      if (METRICS_MAP[cat]) cat = METRICS_MAP[cat];
+      if (CAT_MAP[cat]) cat = CAT_MAP[cat];
       var rawMonth = row[colIdx.month];
       var rawAmt = parseFloat(row[colIdx.amount]) || 0;
       var src = colIdx.source >= 0 ? (row[colIdx.source] || '').trim().toUpperCase() : '';
 
-      /* Skip rows with no category, no month, or categories not in our P&L */
       if (!cat || !rawMonth || !VALID_CATS[cat]) continue;
 
-      var mk = rawMonth.substring(0, 7);
+      var mk = ('' + rawMonth).substring(0, 7);
       if (mk.substring(0, 4) !== '2026') continue;
 
-      var isActual   = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS' || src === 'ACT');
-      var isForecast = (src === 'GL_FORECAST' || src === 'FORECAST' || src === 'FCST');
-
-      /* Skip GL_BUDGET, blank, and any other non-relevant sources */
-      if (!isActual && !isForecast) continue;
+      var isActual = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS');
 
       monthSet[mk] = true;
 
@@ -328,22 +324,42 @@
 
     var months = Object.keys(monthSet).sort();
 
-    console.log('[NatPL] monthActCount:', JSON.stringify(monthActCount));
-    console.log('[NatPL] monthFcstCount:', JSON.stringify(monthFcstCount));
-    /* Debug: categories found per source */
-    var actCats = {}, fcstCats = {};
-    for (var ac in actData) actCats[ac] = Object.keys(actData[ac]).length;
-    for (var fc in fcstData) fcstCats[fc] = Object.keys(fcstData[fc]).length;
-    console.log('[NatPL] ACTUAL categories:', JSON.stringify(actCats));
-    console.log('[NatPL] FCST categories:', JSON.stringify(fcstCats));
+    console.log('[NatPL-SQL] Rows processed:', rows.length);
+    console.log('[NatPL-SQL] Months found:', months.join(', '));
+    console.log('[NatPL-SQL] monthActCount:', JSON.stringify(monthActCount));
+    console.log('[NatPL-SQL] monthFcstCount:', JSON.stringify(monthFcstCount));
+    console.log('[NatPL-SQL] ACTUAL cats:', JSON.stringify(Object.keys(actData)));
+    console.log('[NatPL-SQL] FCST cats:', JSON.stringify(Object.keys(fcstData)));
+    /* Debug: show Jan actual Service Revenue to verify totals */
+    if (actData['Service Revenue'] && actData['Service Revenue']['2026-01']) {
+      console.log('[NatPL-SQL] Jan ACT Service Revenue:', actData['Service Revenue']['2026-01']);
+    }
+    if (fcstData['Service Revenue'] && fcstData['Service Revenue']['2026-04']) {
+      console.log('[NatPL-SQL] Apr FCST Service Revenue:', fcstData['Service Revenue']['2026-04']);
+    }
+    /* Debug: log first 5 skipped rows to see what categories are being dropped */
+    var skipped = {};
+    for (var s = 0; s < rows.length && Object.keys(skipped).length < 20; s++) {
+      var srow = rows[s];
+      var sc = (colIdx.cat >= 0 && srow[colIdx.cat]) ? srow[colIdx.cat] : '';
+      if (!sc && colIdx.metrics >= 0) sc = srow[colIdx.metrics] || '';
+      if (CAT_MAP[sc]) sc = CAT_MAP[sc];
+      if (sc && !VALID_CATS[sc]) skipped[sc] = (skipped[sc] || 0) + 1;
+    }
+    console.log('[NatPL-SQL] Skipped categories (sample):', JSON.stringify(skipped));
 
-    /* Determine current month key — only closed months can be ACT */
+    /* Determine current month key (YYYY-MM) */
     var now = new Date();
     var curMonthKey = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
 
     var monthType = {};
     months.forEach(function (mk) {
-      monthType[mk] = (mk < curMonthKey && monthActCount[mk]) ? 'ACT' : 'FCST';
+      /* Only closed months (before current month) can be ACT */
+      if (mk < curMonthKey && monthActCount[mk]) {
+        monthType[mk] = 'ACT';
+      } else {
+        monthType[mk] = 'FCST';
+      }
     });
 
     /* Merged data: pick actuals or forecast per month */
@@ -413,7 +429,6 @@
     var tbody = document.getElementById('pl-tbody');
     thead.innerHTML = '';
     tbody.innerHTML = '';
-    /* Remove existing colgroup */
     var cg = table.querySelector('colgroup');
     if (cg) table.removeChild(cg);
   }
