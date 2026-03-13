@@ -337,9 +337,13 @@
     console.log('[NatPL] ACTUAL categories:', JSON.stringify(actCats));
     console.log('[NatPL] FCST categories:', JSON.stringify(fcstCats));
 
+    /* Determine current month key — only closed months can be ACT */
+    var now = new Date();
+    var curMonthKey = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+
     var monthType = {};
     months.forEach(function (mk) {
-      monthType[mk] = monthActCount[mk] ? 'ACT' : 'FCST';
+      monthType[mk] = (mk < curMonthKey && monthActCount[mk]) ? 'ACT' : 'FCST';
     });
 
     /* Merged data: pick actuals or forecast per month */

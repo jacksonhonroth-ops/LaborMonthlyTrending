@@ -263,6 +263,10 @@ function aggregateData(rows, cols) {
   Object.keys(forecast).forEach(function (k) { allKeys[k] = true; });
   var sortedKeys = Object.keys(allKeys).sort();
 
+  // Determine current month key — months not yet closed should be FCST
+  var now = new Date();
+  var curMonthKey = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+
   var months = [];
   var actualLabor = [];
   var budgetLabor = [];
@@ -277,8 +281,8 @@ function aggregateData(rows, cols) {
     var a = actual[key];
     var f = forecast[key] || { labor: 0, revenue: 0 };
 
-    // Use actuals if they exist for this month, otherwise use forecast
-    var useActual = a && (a.labor !== 0 || a.revenue !== 0);
+    // Use actuals only for closed months (before the current month)
+    var useActual = key < curMonthKey && a && (a.labor !== 0 || a.revenue !== 0);
     var display = useActual ? a : f;
 
     var label = monthNames[monthNum - 1] + " " + parts[0];

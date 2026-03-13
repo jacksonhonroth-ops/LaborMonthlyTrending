@@ -354,13 +354,9 @@
 
     var monthType = {};
     months.forEach(function (mk) {
-      if (monthActCount[mk]) {
-        /* Current month with partial actuals: prefer forecast if available */
-        if (mk === curMonthKey && monthFcstCount[mk]) {
-          monthType[mk] = 'FCST';
-        } else {
-          monthType[mk] = 'ACT';
-        }
+      /* Only closed months (before current month) can be ACT */
+      if (mk < curMonthKey && monthActCount[mk]) {
+        monthType[mk] = 'ACT';
       } else {
         monthType[mk] = 'FCST';
       }
