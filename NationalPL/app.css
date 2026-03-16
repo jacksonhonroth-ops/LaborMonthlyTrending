@@ -273,10 +273,14 @@ body {
 #pl-table col.col-data  { width: 90px; }
 
 /* ── Header Rows ── */
-#pl-table thead {
+#pl-table thead th {
   position: sticky;
   top: 0;
   z-index: 5;
+}
+
+#pl-table thead tr.header-type th {
+  top: 28px; /* offset below first header row */
 }
 
 /* Top header row: Month labels */
@@ -289,6 +293,7 @@ body {
   border-bottom: none;
   border-right: 1px solid rgba(255,255,255,0.2);
   white-space: nowrap;
+  background: #3a3f51;
 }
 
 #pl-table thead tr.header-months th.col-label-header {
@@ -328,6 +333,7 @@ body {
   letter-spacing: 0.5px;
   border-bottom: 2px solid #ccc;
   border-right: 1px solid rgba(255,255,255,0.2);
+  background: #3a3f51;
 }
 
 #pl-table thead tr.header-type th.col-label-header {

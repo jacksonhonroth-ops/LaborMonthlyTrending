@@ -523,19 +523,19 @@
     });
 
     var thFY = document.createElement('th');
-    thFY.textContent = 'FY';
+    thFY.textContent = 'FY Total';
     thFY.className = 'fy-total';
     thFY.rowSpan = 2;
     tr1.appendChild(thFY);
 
     var thBud = document.createElement('th');
-    thBud.textContent = 'BUDGET';
+    thBud.textContent = 'FY Budget';
     thBud.className = 'budget-header';
     thBud.rowSpan = 2;
     tr1.appendChild(thBud);
 
     var thVar = document.createElement('th');
-    thVar.textContent = 'Fcst vs Bud';
+    thVar.textContent = 'Variance';
     thVar.className = 'var-header';
     thVar.rowSpan = 2;
     tr1.appendChild(thVar);
