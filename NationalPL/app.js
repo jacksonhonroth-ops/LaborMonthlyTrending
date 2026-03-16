@@ -1,15 +1,22 @@
 /* ================================================================
    National P&L – DOMO Phoenix Pro Code Card (Monthly View)
+   Uses SQL aggregation to correctly filter: Metrics = P&L Category Name
    Columns: monthly ACT/FCST, FY Total, FY Budget, FY Variance
    ================================================================ */
 (function () {
   'use strict';
 
-  var DATA_URL = '/data/v1/dataset?limit=5000000';
+  var SQL_QUERY = "SELECT `MONTH`, `Region`, `Column` as `SOURCE`, " +
+    "`Metrics`, SUM(`AMOUNT`) as `AMOUNT` " +
+    "FROM dataset " +
+    "WHERE `Column` IN ('ACTUAL', 'GL_FORECAST', 'GL_BUDGET') " +
+    "AND `Metrics` IN ('Service Revenue','Total Labor','Contract Expenses'," +
+    "'Supplies & Materials','Field Overhead','HQ Overhead','Sales Overhead'," +
+    "'Benefits & Taxes','Total Addbacks') " +
+    "AND `Metrics` = `P&L Category Name` " +
+    "GROUP BY `MONTH`, `Region`, `Column`, `Metrics`";
 
-  /* ── P&L Structure ──
-     [label, matchKey, type]
-     type: category | subtotal | spacer | pct */
+  /* ── P&L Structure ── */
   var PL_ROWS = [
     ['Total Revenue',                   'Service Revenue',      'subtotal'],
     [null,                              null,                   'spacer'],
@@ -42,11 +49,9 @@
     ['Adj EBITDA as a % of Total Revenue', '_ebitdaPctRev',     'pct']
   ];
 
-  var METRICS_MAP = {
-    'Other Expense (Income)': 'Other Income/ Expense'
-  };
+  /* Revenue is stored as credit (negative) in ACTUALS; forecast/budget already positive */
+  var CREDIT_CATS = ['Service Revenue'];
 
-  /* Only aggregate rows matching our defined P&L categories */
   var VALID_CATS = {};
   PL_ROWS.forEach(function (r) { if (r[1] && r[1][0] !== '_') VALID_CATS[r[1]] = true; });
 
@@ -133,17 +138,17 @@
     }
   }
 
-  /* ── Data Loading ── */
+  /* ── Data Loading (SQL) ── */
   function loadData() {
-    if (typeof domo === 'undefined' || !domo.get) {
+    if (typeof domo === 'undefined' || !domo.post) {
       showError('domo.js not loaded');
       return;
     }
-    domo.get(DATA_URL, { format: 'array-of-arrays' })
+    domo.post('/sql/v1/dataset', SQL_QUERY, { contentType: 'text/plain' })
       .then(function (resp) { initData(resp); })
       .catch(function (err) {
         var msg = err && err.message ? err.message : JSON.stringify(err);
-        showError('Load error: ' + msg);
+        showError('SQL error: ' + msg);
       });
   }
 
@@ -159,13 +164,12 @@
     colIdx = {
       month:   findCol(cols, ['MONTH', 'Month']),
       amount:  findCol(cols, ['AMOUNT', 'Amount']),
-      source:  findCol(cols, ['SOURCE', 'Source']),
-      cat:     findCol(cols, ['P&L Category Name', 'PLCategoryName']),
+      source:  findCol(cols, ['SOURCE', 'Source', 'Column']),
       metrics: findCol(cols, ['Metrics', 'METRICS', 'Metric']),
       region:  findCol(cols, ['Region', 'region', 'REGION'])
     };
 
-    if (colIdx.month === -1 || colIdx.amount === -1 || (colIdx.cat === -1 && colIdx.metrics === -1)) {
+    if (colIdx.month === -1 || colIdx.amount === -1 || colIdx.metrics === -1) {
       showError('Missing columns. Found: ' + cols.join(', '));
       return;
     }
@@ -257,7 +261,7 @@
     renderTable(result);
   }
 
-  /* ── Compute all derived rows from a category->value lookup ── */
+  /* ── Compute all derived rows from a getCat(name) function ── */
   function computeRows(getCat) {
     var rev       = getCat('Service Revenue');
     var labor     = getCat('Total Labor');
@@ -269,11 +273,11 @@
     var hqOH      = getCat('HQ Overhead');
     var addbacks  = getCat('Total Addbacks');
 
-    var grossMargin      = rev - labor - bnt - supplies;
+    var grossMargin       = rev - labor - bnt - supplies;
     var grossContribution = grossMargin - contracts;
-    var totalOverhead    = fieldOH + salesOH + hqOH;
-    var netIncome        = grossContribution - totalOverhead;
-    var adjEbitda        = netIncome + addbacks;
+    var totalOverhead     = fieldOH + salesOH + hqOH;
+    var netIncome         = grossContribution - totalOverhead;
+    var adjEbitda         = netIncome + addbacks;
 
     return {
       '_laborPctRev':       rev !== 0 ? labor / rev : 0,
@@ -292,7 +296,7 @@
     };
   }
 
-  /* ── Aggregate ── */
+  /* ── Aggregate (data pre-aggregated by SQL, just pivot here) ── */
   function aggregateRows(rows) {
     var actData  = {};
     var budData  = {};
@@ -302,27 +306,26 @@
 
     for (var r = 0; r < rows.length; r++) {
       var row = rows[r];
-      var cat = (colIdx.cat >= 0 && row[colIdx.cat]) ? row[colIdx.cat] : '';
-      if (!cat && colIdx.metrics >= 0) cat = row[colIdx.metrics] || '';
-      if (METRICS_MAP[cat]) cat = METRICS_MAP[cat];
+      var cat = row[colIdx.metrics] || '';
       var rawMonth = row[colIdx.month];
       var rawAmt = parseFloat(row[colIdx.amount]) || 0;
       var src = colIdx.source >= 0 ? (row[colIdx.source] || '').trim().toUpperCase() : '';
 
       if (!cat || !rawMonth || !VALID_CATS[cat]) continue;
 
-      var mk = rawMonth.substring(0, 7);
+      var mk = ('' + rawMonth).substring(0, 7);
       if (mk.substring(0, 4) !== '2026') continue;
 
-      var isActual   = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS' || src === 'ACT');
-      var isBudget   = (src === 'GL_BUDGET' || src === 'BUDGET' || src === 'BUD');
-      var isForecast = (src === 'GL_FORECAST' || src === 'FORECAST' || src === 'FCST');
+      var isActual   = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS');
+      var isBudget   = (src === 'GL_BUDGET' || src === 'BUDGET');
+      var isForecast = (src === 'GL_FORECAST' || src === 'FORECAST');
       if (!isActual && !isBudget && !isForecast) continue;
 
       monthSet[mk] = true;
 
-      /* GL actuals are stored with opposite sign — negate all */
-      var amt = isActual ? rawAmt * -1 : rawAmt;
+      /* Negate credit categories for ACTUALS only */
+      var isCredit = CREDIT_CATS.indexOf(cat) !== -1;
+      var amt = (isCredit && isActual) ? rawAmt * -1 : rawAmt;
 
       if (isActual) {
         if (!actData[cat]) actData[cat] = {};
@@ -339,7 +342,6 @@
 
     var months = Object.keys(monthSet).sort();
 
-    /* Determine current month key — only closed months can be ACT */
     var now = new Date();
     var curMonthKey = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
 
@@ -387,11 +389,7 @@
       });
       budTotals[bc] = total;
     }
-
-    /* Computed rows for budget */
-    var budComputed = computeRows(function (c) {
-      return budTotals[c] || 0;
-    });
+    var budComputed = computeRows(function (c) { return budTotals[c] || 0; });
 
     return {
       displayRows: PL_ROWS.slice(),
@@ -429,7 +427,6 @@
     var thead = document.getElementById('pl-thead');
     var tbody = document.getElementById('pl-tbody');
 
-    /* Total columns = label + months + FY + Budget + Variance */
     var totalCols = months.length + 4;
 
     /* Colgroup */
@@ -442,7 +439,6 @@
       c.className = 'col-data';
       cg.appendChild(c);
     });
-    /* FY, Budget, Variance cols */
     for (var ci = 0; ci < 3; ci++) {
       var cf = document.createElement('col');
       cf.className = 'col-data';
@@ -450,7 +446,7 @@
     }
     table.insertBefore(cg, thead);
 
-    /* Header row 1: Month names + FY/Budget/Variance */
+    /* Header row 1 */
     var tr1 = document.createElement('tr');
     tr1.className = 'header-months';
     var th0 = document.createElement('th');
@@ -486,7 +482,7 @@
 
     thead.appendChild(tr1);
 
-    /* Header row 2: ACT/FCST labels */
+    /* Header row 2 */
     var tr2 = document.createElement('tr');
     tr2.className = 'header-type';
     months.forEach(function (mk) {
@@ -523,7 +519,6 @@
         return;
       }
 
-      /* Label cell */
       var tdLabel = document.createElement('td');
       tdLabel.textContent = label;
       tr.appendChild(tdLabel);
@@ -546,20 +541,19 @@
         tr.appendChild(td);
       });
 
-      /* FY Total — for pct rows, recompute from FY totals */
+      /* FY Total */
       var tdFY = document.createElement('td');
       tdFY.className = 'fy-total-cell';
       var fyVal;
       if (isPct) {
-        /* Recompute pct from FY sums */
-        var fyComputed = computeRows(function (c) {
+        var fyComp = computeRows(function (c) {
           var s = merged[c];
           if (!s) return 0;
           var t = 0;
           months.forEach(function (mk) { t += s[mk] || 0; });
           return t;
         });
-        fyVal = fyComputed[key] || 0;
+        fyVal = fyComp[key] || 0;
         tdFY.textContent = fmtPct(fyVal);
       } else {
         fyVal = fyTotal;
@@ -571,18 +565,13 @@
       /* FY Budget */
       var tdBud = document.createElement('td');
       tdBud.className = 'budget-cell';
-      var budVal;
-      if (isComputed) {
-        budVal = budComputed[key] || 0;
-      } else {
-        budVal = budTotals[key] || 0;
-      }
+      var budVal = isComputed ? (budComputed[key] || 0) : (budTotals[key] || 0);
       tdBud.textContent = isPct ? fmtPct(budVal) : fmt(budVal);
       var bvc = valClass(budVal);
       if (bvc) tdBud.className += ' ' + bvc;
       tr.appendChild(tdBud);
 
-      /* FY Variance = FY Total − Budget */
+      /* FY Variance */
       var tdVar = document.createElement('td');
       tdVar.className = 'var-cell';
       var variance = fyVal - budVal;

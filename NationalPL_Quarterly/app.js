@@ -1,12 +1,21 @@
 /* ================================================================
    National P&L – Quarterly View
+   Uses SQL aggregation to correctly filter: Metrics = P&L Category Name
    Per quarter: Actuals (or QTD), Budget, Forecast
    FY: Total (closed-Q actuals + forecast for open), Budget, Variance
    ================================================================ */
 (function () {
   'use strict';
 
-  var DATA_URL = '/data/v1/dataset?limit=5000000';
+  var SQL_QUERY = "SELECT `MONTH`, `Region`, `Column` as `SOURCE`, " +
+    "`Metrics`, SUM(`AMOUNT`) as `AMOUNT` " +
+    "FROM dataset " +
+    "WHERE `Column` IN ('ACTUAL', 'GL_FORECAST', 'GL_BUDGET') " +
+    "AND `Metrics` IN ('Service Revenue','Total Labor','Contract Expenses'," +
+    "'Supplies & Materials','Field Overhead','HQ Overhead','Sales Overhead'," +
+    "'Benefits & Taxes','Total Addbacks') " +
+    "AND `Metrics` = `P&L Category Name` " +
+    "GROUP BY `MONTH`, `Region`, `Column`, `Metrics`";
 
   /* ── P&L Structure ── */
   var PL_ROWS = [
@@ -41,9 +50,8 @@
     ['Adj EBITDA as a % of Total Revenue', '_ebitdaPctRev',     'pct']
   ];
 
-  var METRICS_MAP = {
-    'Other Expense (Income)': 'Other Income/ Expense'
-  };
+  /* Revenue is stored as credit (negative) in ACTUALS; forecast/budget already positive */
+  var CREDIT_CATS = ['Service Revenue'];
 
   var VALID_CATS = {};
   PL_ROWS.forEach(function (r) { if (r[1] && r[1][0] !== '_') VALID_CATS[r[1]] = true; });
@@ -80,7 +88,7 @@
     return val > 0 ? 'val-positive' : 'val-negative';
   }
 
-  /* ── Compute all derived rows from a getCat(name) function ── */
+  /* ── Compute derived rows ── */
   function computeRows(getCat) {
     var rev       = getCat('Service Revenue');
     var labor     = getCat('Total Labor');
@@ -168,17 +176,17 @@
     }
   }
 
-  /* ── Data Loading ── */
+  /* ── Data Loading (SQL) ── */
   function loadData() {
-    if (typeof domo === 'undefined' || !domo.get) {
+    if (typeof domo === 'undefined' || !domo.post) {
       showError('domo.js not loaded');
       return;
     }
-    domo.get(DATA_URL, { format: 'array-of-arrays' })
+    domo.post('/sql/v1/dataset', SQL_QUERY, { contentType: 'text/plain' })
       .then(function (resp) { initData(resp); })
       .catch(function (err) {
         var msg = err && err.message ? err.message : JSON.stringify(err);
-        showError('Load error: ' + msg);
+        showError('SQL error: ' + msg);
       });
   }
 
@@ -194,13 +202,12 @@
     colIdx = {
       month:   findCol(cols, ['MONTH', 'Month']),
       amount:  findCol(cols, ['AMOUNT', 'Amount']),
-      source:  findCol(cols, ['SOURCE', 'Source']),
-      cat:     findCol(cols, ['P&L Category Name', 'PLCategoryName']),
+      source:  findCol(cols, ['SOURCE', 'Source', 'Column']),
       metrics: findCol(cols, ['Metrics', 'METRICS', 'Metric']),
       region:  findCol(cols, ['Region', 'region', 'REGION'])
     };
 
-    if (colIdx.month === -1 || colIdx.amount === -1 || (colIdx.cat === -1 && colIdx.metrics === -1)) {
+    if (colIdx.month === -1 || colIdx.amount === -1 || colIdx.metrics === -1) {
       showError('Missing columns. Found: ' + cols.join(', '));
       return;
     }
@@ -301,25 +308,24 @@
 
     for (var r = 0; r < rows.length; r++) {
       var row = rows[r];
-      var cat = (colIdx.cat >= 0 && row[colIdx.cat]) ? row[colIdx.cat] : '';
-      if (!cat && colIdx.metrics >= 0) cat = row[colIdx.metrics] || '';
-      if (METRICS_MAP[cat]) cat = METRICS_MAP[cat];
+      var cat = row[colIdx.metrics] || '';
       var rawMonth = row[colIdx.month];
       var rawAmt = parseFloat(row[colIdx.amount]) || 0;
       var src = colIdx.source >= 0 ? (row[colIdx.source] || '').trim().toUpperCase() : '';
 
       if (!cat || !rawMonth || !VALID_CATS[cat]) continue;
 
-      var mk = rawMonth.substring(0, 7);
+      var mk = ('' + rawMonth).substring(0, 7);
       if (mk.substring(0, 4) !== CURRENT_YEAR) continue;
 
-      var isActual   = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS' || src === 'ACT');
-      var isBudget   = (src === 'GL_BUDGET' || src === 'BUDGET' || src === 'BUD');
-      var isForecast = (src === 'GL_FORECAST' || src === 'FORECAST' || src === 'FCST');
+      var isActual   = (src === 'ACTUAL' || src === 'ACTUALS' || src === 'GL_ACTUALS');
+      var isBudget   = (src === 'GL_BUDGET' || src === 'BUDGET');
+      var isForecast = (src === 'GL_FORECAST' || src === 'FORECAST');
       if (!isActual && !isBudget && !isForecast) continue;
 
-      /* GL actuals are stored with opposite sign — negate all */
-      var amt = isActual ? rawAmt * -1 : rawAmt;
+      /* Negate credit categories for ACTUALS only */
+      var isCredit = CREDIT_CATS.indexOf(cat) !== -1;
+      var amt = (isCredit && isActual) ? rawAmt * -1 : rawAmt;
 
       if (isActual) {
         if (!actData[cat]) actData[cat] = {};
@@ -398,8 +404,8 @@
       return qData;
     }
 
-    var qActQTD = rollUpActualsQTD();
-    var qBudRaw = rollUpSource(budData);
+    var qActQTD  = rollUpActualsQTD();
+    var qBudRaw  = rollUpSource(budData);
     var qFcstRaw = rollUpSource(fcstData);
 
     /* Compute derived rows per quarter for each source */
@@ -418,12 +424,11 @@
     }
 
     var qLabels = QUARTERS.map(function (q) { return q.label; });
-
     var actQTDComp = computeQuarterRows(qActQTD, qLabels);
     var budComp    = computeQuarterRows(qBudRaw, qLabels.concat(['FY']));
     var fcstComp   = computeQuarterRows(qFcstRaw, qLabels.concat(['FY']));
 
-    /* FY Total: closed-quarter actuals + forecast for open quarters */
+    /* FY Total: closed-quarter actuals + forecast for open */
     var fyTotalCats = {};
     for (var cat in allCats) {
       var fy = 0;
@@ -438,7 +443,7 @@
     }
     var fyTotalComp = computeRows(function (c) { return fyTotalCats[c] || 0; });
 
-    /* FY Variance = FY Total - FY Budget */
+    /* FY Budget */
     var fyBudCats = {};
     for (var bc in allCats) {
       fyBudCats[bc] = (qBudRaw[bc] && qBudRaw[bc]['FY']) || 0;
@@ -508,7 +513,6 @@
 
     var totalDataCols = colDefs.length;
 
-    /* Group spans for header row 1 */
     var groupSpans = {};
     colDefs.forEach(function (cd) {
       groupSpans[cd.group] = (groupSpans[cd.group] || 0) + 1;
@@ -581,7 +585,6 @@
         }
       }
 
-      /* Quarter columns */
       if (cd.type === 'act') {
         if (isComputed) return (actQTDComp[key] && actQTDComp[key][cd.group]) || 0;
         return (qActQTD[key] && qActQTD[key][cd.group]) || 0;
