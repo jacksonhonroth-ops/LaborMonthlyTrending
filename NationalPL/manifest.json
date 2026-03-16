@@ -1,6 +1,6 @@
 {
    "name": "NationalPL",
-   "version": "0.0.4",
+   "version": "0.0.5",
    "datasetsMapping": [
       {
          "dataSetId": "6c5e3f1b-56c4-4273-98ec-4af164645cfa",
@@ -11,10 +11,7 @@
             { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
             { "alias": "Column", "columnName": "Column" },
             { "alias": "Region", "columnName": "Region" },
-            { "alias": "Metrics", "columnName": "Metrics" },
-            { "alias": "JobNumber", "columnName": "Job Number" },
-            { "alias": "ParentAccount", "columnName": "Parent Account" },
-            { "alias": "OperationsLead", "columnName": "Operations Lead" }
+            { "alias": "Metrics", "columnName": "Metrics" }
          ]
       }
    ],
