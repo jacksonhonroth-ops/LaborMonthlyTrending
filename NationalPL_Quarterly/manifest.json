@@ -1,0 +1,20 @@
+{
+   "name": "NationalPL_Quarterly",
+   "version": "0.0.1",
+   "datasetsMapping": [
+      {
+         "dataSetId": "6c5e3f1b-56c4-4273-98ec-4af164645cfa",
+         "alias": "dataset",
+         "fields": [
+            { "alias": "MONTH", "columnName": "MONTH" },
+            { "alias": "AMOUNT", "columnName": "AMOUNT" },
+            { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
+            { "alias": "SOURCE", "columnName": "SOURCE" },
+            { "alias": "Region", "columnName": "Region" },
+            { "alias": "Metrics", "columnName": "Metrics" }
+         ]
+      }
+   ],
+   "size": { "width": 6, "height": 4 },
+   "fullpage": true
+}
