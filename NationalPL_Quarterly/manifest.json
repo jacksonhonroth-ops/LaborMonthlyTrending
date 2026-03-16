@@ -11,7 +11,10 @@
             { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
             { "alias": "Column", "columnName": "Column" },
             { "alias": "Region", "columnName": "Region" },
-            { "alias": "Metrics", "columnName": "Metrics" }
+            { "alias": "Metrics", "columnName": "Metrics" },
+            { "alias": "JobNumber", "columnName": "Job Number" },
+            { "alias": "ParentAccount", "columnName": "Parent Account" },
+            { "alias": "OperationsLead", "columnName": "Operations Lead" }
          ]
       }
    ],
