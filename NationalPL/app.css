@@ -48,6 +48,10 @@ body {
   color: #2563a8;
 }
 
+.legend-bud {
+  color: #7c5c20;
+}
+
 /* ── Filter Bar ── */
 #filter-bar {
   display: flex;
@@ -306,13 +310,12 @@ body {
   background: #3a3f51;
 }
 
-#pl-table thead tr.header-months th.budget-col {
-  background: #6b5b95;
+#pl-table thead tr.header-months th.budget-header {
+  background: #7c5c20;
 }
 
-#pl-table thead tr.header-months th.var-col {
-  background: #e67e22;
-  color: #fff;
+#pl-table thead tr.header-months th.var-header {
+  background: #5b3a8c;
 }
 
 /* Sub-header row: ACT / FCST labels */
@@ -347,15 +350,6 @@ body {
   color: #fff;
 }
 
-#pl-table thead tr.header-type th.budget-col {
-  background: #7d6da8;
-  color: #fff;
-}
-
-#pl-table thead tr.header-type th.var-col {
-  background: #f0923e;
-  color: #fff;
-}
 
 /* ── Body Rows ── */
 #pl-table tbody tr {
@@ -453,12 +447,15 @@ td.fy-total-cell {
 }
 
 td.budget-cell {
-  background: #f9f5ff;
+  background: #faf8f0;
+  font-weight: 600;
+  border-left: 2px solid #7c5c20;
 }
 
 td.var-cell {
-  background: #fff8f0;
+  background: #f8f5fc;
   font-weight: 600;
+  border-left: 2px solid #5b3a8c;
 }
 
 /* ── Responsive ── */

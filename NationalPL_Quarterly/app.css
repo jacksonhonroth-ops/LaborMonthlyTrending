@@ -285,6 +285,11 @@ body {
   border-right: 2px solid #145c2e;
 }
 
+#pl-table thead tr.header-months th.quarter-group.partial {
+  background: linear-gradient(135deg, #1b7a3d 50%, #2563a8 50%);
+  border-right: 2px solid #1d4e8a;
+}
+
 #pl-table thead tr.header-months th.quarter-group.fcst {
   background: #2563a8;
   border-right: 2px solid #1d4e8a;

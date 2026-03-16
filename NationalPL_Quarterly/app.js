@@ -1,11 +1,7 @@
 /* ================================================================
    National P&L – Quarterly View
-   Three columns per quarter: Actuals, Budget, Forecast
-   Plus FY Total (Act, Bud, Fcst) and FY Variance (Bud − Act).
-   Actuals: if the full quarter is closed, show actuals.
-            Otherwise, show forecast for the entire quarter.
-   Budget:  GL_BUDGET source only.
-   Forecast: GL_FORECAST source only.
+   Per quarter: Actuals (or QTD), Budget, Forecast
+   FY: Total (closed-Q actuals + forecast for open), Budget, Variance
    ================================================================ */
 (function () {
   'use strict';
@@ -14,46 +10,38 @@
 
   /* ── P&L Structure ── */
   var PL_ROWS = [
-    ['Revenue',              null,                   'header'],
-    ['Service Revenue',      'Service Revenue',      'category'],
-    ['Total Revenue',        '_totalRevenue',        'subtotal'],
-    [null,                   null,                   'spacer'],
-
-    ['Cost of Goods Sold',   null,                   'header'],
-    ['Total Labor',          'Total Labor',          'category'],
-    ['Contract Expenses',    'Contract Expenses',    'category'],
-    ['Supplies & Materials', 'Supplies & Materials', 'category'],
-    ['Total COGS',           '_totalCOGS',           'subtotal'],
-    [null,                   null,                   'spacer'],
-
-    ['Gross Profit',         '_grossProfit',         'subtotal'],
-    ['GP %',                 '_gpPct',               'pct'],
-    [null,                   null,                   'spacer'],
-
-    ['Operating Expenses',   null,                   'header'],
-    ['Field Overhead',       'Field Overhead',       'category'],
-    ['HQ Overhead',          'HQ Overhead',          'category'],
-    ['Sales Overhead',       'Sales Overhead',       'category'],
-    ['Benefits & Taxes',     'Benefits & Taxes',     'category'],
-    ['Total OpEx',           '_totalOpEx',           'subtotal'],
-    [null,                   null,                   'spacer'],
-
-    ['Other Income/Expense', null,                   'header'],
-    ['Income Taxes',         'Income Taxes',         'category'],
-    ['Other Income/ Expense','Other Income/ Expense','category'],
-    ['Total Other',          '_totalOther',          'subtotal'],
-    [null,                   null,                   'spacer'],
-
-    ['Net Income',           '_netIncome',           'subtotal'],
-    ['NI %',                 '_niPct',               'pct']
+    ['Total Revenue',                   'Service Revenue',      'subtotal'],
+    [null,                              null,                   'spacer'],
+    ['Total Labor',                     'Total Labor',          'category'],
+    ['Total Labor % of Tot Revenue',    '_laborPctRev',         'pct'],
+    ['Benefits & Taxes',                'Benefits & Taxes',     'category'],
+    ['B&T % of Total Labor',            '_bntPctLabor',         'pct'],
+    ['Supplies & Materials',            'Supplies & Materials', 'category'],
+    ['Supplies % of Total Labor',       '_suppliesPctLabor',    'pct'],
+    [null,                              null,                   'spacer'],
+    ['Gross Margin',                    '_grossMargin',         'subtotal'],
+    ['GM %',                            '_gmPct',               'pct'],
+    [null,                              null,                   'spacer'],
+    ['Contract Expenses',               'Contract Expenses',    'category'],
+    ['Contract Expenses % of Revenue',  '_contractPctRev',      'pct'],
+    [null,                              null,                   'spacer'],
+    ['Gross Contribution',              '_grossContribution',   'subtotal'],
+    ['GC %',                            '_gcPct',               'pct'],
+    [null,                              null,                   'spacer'],
+    ['Field Overhead',                  'Field Overhead',       'category'],
+    ['Sales Overhead',                  'Sales Overhead',       'category'],
+    ['HQ Overhead',                     'HQ Overhead',          'category'],
+    ['TOTAL Overhead',                  '_totalOverhead',       'subtotal'],
+    ['OH % of Revenue',                 '_ohPctRev',            'pct'],
+    [null,                              null,                   'spacer'],
+    ['Net Income',                      '_netIncome',           'subtotal'],
+    [null,                              null,                   'spacer'],
+    ['Total Addbacks',                  'Total Addbacks',       'category'],
+    ['Adj EBITDA',                      '_adjEbitda',           'subtotal'],
+    ['Adj EBITDA as a % of Total Revenue', '_ebitdaPctRev',     'pct']
   ];
 
-  var REVENUE_CATS  = ['Service Revenue'];
-  var COGS_CATS     = ['Total Labor', 'Contract Expenses', 'Supplies & Materials'];
-  var OPEX_CATS     = ['Field Overhead', 'HQ Overhead', 'Sales Overhead', 'Benefits & Taxes'];
-  var OTHER_CATS    = ['Income Taxes', 'Other Income/ Expense'];
-
-  var CREDIT_CATS   = ['Service Revenue', 'Other Income/ Expense'];
+  var CREDIT_CATS = ['Service Revenue'];
 
   var METRICS_MAP = {
     'Other Expense (Income)': 'Other Income/ Expense'
@@ -61,14 +49,6 @@
 
   var VALID_CATS = {};
   PL_ROWS.forEach(function (r) { if (r[1] && r[1][0] !== '_') VALID_CATS[r[1]] = true; });
-
-  /* Sub-columns per quarter group */
-  var Q_SOURCES = ['act', 'bud', 'fcst'];
-  var Q_SOURCE_LABELS = { act: 'Actuals', bud: 'Budget', fcst: 'Forecast' };
-
-  /* FY group has an extra Variance column */
-  var FY_SOURCES = ['act', 'bud', 'fcst', 'var'];
-  var FY_SOURCE_LABELS = { act: 'Actuals', bud: 'Budget', fcst: 'Forecast', var: 'Variance' };
 
   var CURRENT_YEAR = '2026';
   var QUARTERS = [
@@ -97,10 +77,44 @@
     return val < 0 ? 'val-negative' : '';
   }
 
-  /* Variance class: positive = good (green), negative = bad (red) */
   function varClass(val) {
     if (val == null || isNaN(val) || val === 0) return '';
     return val > 0 ? 'val-positive' : 'val-negative';
+  }
+
+  /* ── Compute all derived rows from a getCat(name) function ── */
+  function computeRows(getCat) {
+    var rev       = getCat('Service Revenue');
+    var labor     = getCat('Total Labor');
+    var bnt       = getCat('Benefits & Taxes');
+    var supplies  = getCat('Supplies & Materials');
+    var contracts = getCat('Contract Expenses');
+    var fieldOH   = getCat('Field Overhead');
+    var salesOH   = getCat('Sales Overhead');
+    var hqOH      = getCat('HQ Overhead');
+    var addbacks  = getCat('Total Addbacks');
+
+    var grossMargin       = rev - labor - bnt - supplies;
+    var grossContribution = grossMargin - contracts;
+    var totalOverhead     = fieldOH + salesOH + hqOH;
+    var netIncome         = grossContribution - totalOverhead;
+    var adjEbitda         = netIncome + addbacks;
+
+    return {
+      '_laborPctRev':       rev !== 0 ? labor / rev : 0,
+      '_bntPctLabor':       labor !== 0 ? bnt / labor : 0,
+      '_suppliesPctLabor':  labor !== 0 ? supplies / labor : 0,
+      '_grossMargin':       grossMargin,
+      '_gmPct':             rev !== 0 ? grossMargin / rev : 0,
+      '_contractPctRev':    rev !== 0 ? contracts / rev : 0,
+      '_grossContribution': grossContribution,
+      '_gcPct':             rev !== 0 ? grossContribution / rev : 0,
+      '_totalOverhead':     totalOverhead,
+      '_ohPctRev':          rev !== 0 ? totalOverhead / rev : 0,
+      '_netIncome':         netIncome,
+      '_adjEbitda':         adjEbitda,
+      '_ebitdaPctRev':      rev !== 0 ? adjEbitda / rev : 0
+    };
   }
 
   /* ── Stored state ── */
@@ -282,7 +296,7 @@
 
   /* ── Aggregate ── */
   function aggregateRows(rows) {
-    var actData  = {};   /* category -> { month -> amount } */
+    var actData  = {};
     var budData  = {};
     var fcstData = {};
     var monthActCount = {};
@@ -322,7 +336,6 @@
       }
     }
 
-    /* Current month key — only months before this can be ACT */
     var now = new Date();
     var curMonthKey = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
 
@@ -336,144 +349,116 @@
       monthType[mk] = (mk < curMonthKey && monthActCount[mk]) ? 'ACT' : 'FCST';
     });
 
-    /* Determine which quarters are fully closed */
-    var quarterClosed = {};
+    /* Quarter status */
+    var quarterStatus = {};
     QUARTERS.forEach(function (q) {
-      quarterClosed[q.label] = q.months.every(function (mk) {
-        return monthType[mk] === 'ACT';
-      });
+      var actCount = q.months.filter(function (mk) { return monthType[mk] === 'ACT'; }).length;
+      if (actCount === 3) quarterStatus[q.label] = 'closed';
+      else if (actCount > 0) quarterStatus[q.label] = 'partial';
+      else quarterStatus[q.label] = 'none';
     });
 
-    /* Collect all categories seen */
     var allCats = {};
     [actData, budData, fcstData].forEach(function (d) {
       for (var c in d) allCats[c] = true;
     });
 
-    /* Helper: sum category list from a data object for given months */
-    function sumCatsFrom(dataObj, catList, months) {
-      var total = 0;
-      catList.forEach(function (c) {
-        months.forEach(function (mk) {
-          if (dataObj[c] && dataObj[c][mk] != null) total += dataObj[c][mk];
-        });
-      });
-      return total;
-    }
-
-    var compKeys = ['_totalRevenue','_totalCOGS','_grossProfit','_gpPct','_totalOpEx','_totalOther','_netIncome','_niPct'];
-
-    /* Roll up a data source directly to quarterly totals */
+    /* Roll up a data source to quarterly + FY */
     function rollUpSource(dataObj) {
       var qData = {};
       for (var cat in allCats) {
         qData[cat] = {};
-        var fyTotal = 0;
+        var fy = 0;
         QUARTERS.forEach(function (q) {
           var sum = 0;
           q.months.forEach(function (mk) {
             sum += (dataObj[cat] && dataObj[cat][mk]) || 0;
           });
           qData[cat][q.label] = sum;
-          fyTotal += sum;
+          fy += sum;
         });
-        qData[cat]['FY'] = fyTotal;
+        qData[cat]['FY'] = fy;
       }
-
-      /* Computed subtotals */
-      compKeys.forEach(function (k) {
-        if (k === '_gpPct' || k === '_niPct') return;
-        qData[k] = {};
-      });
-
-      var qLabels = QUARTERS.map(function (q) { return q.label; });
-      qLabels.push('FY');
-
-      qLabels.forEach(function (ql) {
-        var months = ql === 'FY'
-          ? allMonths
-          : QUARTERS.filter(function (q) { return q.label === ql; })[0].months;
-
-        var rev   = sumCatsFrom(dataObj, REVENUE_CATS, months);
-        var cogs  = sumCatsFrom(dataObj, COGS_CATS, months);
-        var opex  = sumCatsFrom(dataObj, OPEX_CATS, months);
-        var other = sumCatsFrom(dataObj, OTHER_CATS, months);
-        var gp    = rev - cogs;
-        var ni    = gp - opex - other;
-
-        qData['_totalRevenue'][ql] = rev;
-        qData['_totalCOGS'][ql]    = cogs;
-        qData['_grossProfit'][ql]  = gp;
-        qData['_totalOpEx'][ql]    = opex;
-        qData['_totalOther'][ql]   = other;
-        qData['_netIncome'][ql]    = ni;
-      });
-
-      /* Pct rows from quarterly totals */
-      qData['_gpPct'] = {};
-      qData['_niPct'] = {};
-      qLabels.forEach(function (ql) {
-        var rev = qData['_totalRevenue'][ql];
-        qData['_gpPct'][ql] = rev !== 0 ? qData['_grossProfit'][ql] / rev : 0;
-        qData['_niPct'][ql] = rev !== 0 ? qData['_netIncome'][ql] / rev : 0;
-      });
-
       return qData;
     }
 
-    var qActRaw  = rollUpSource(actData);
-    var qBud     = rollUpSource(budData);
-    var qFcst    = rollUpSource(fcstData);
+    /* Roll up actuals for closed months only (for QTD) */
+    function rollUpActualsQTD() {
+      var qData = {};
+      for (var cat in allCats) {
+        qData[cat] = {};
+        QUARTERS.forEach(function (q) {
+          var sum = 0;
+          q.months.forEach(function (mk) {
+            if (monthType[mk] === 'ACT') {
+              sum += (actData[cat] && actData[cat][mk]) || 0;
+            }
+          });
+          qData[cat][q.label] = sum;
+        });
+      }
+      return qData;
+    }
 
-    /* Build "Actuals" display: full quarter actuals if closed, else forecast */
-    var qAct = {};
-    var allKeys = Object.keys(allCats).concat(compKeys);
-    allKeys.forEach(function (key) {
-      qAct[key] = {};
-      QUARTERS.forEach(function (q) {
-        if (quarterClosed[q.label]) {
-          qAct[key][q.label] = (qActRaw[key] && qActRaw[key][q.label]) || 0;
-        } else {
-          qAct[key][q.label] = (qFcst[key] && qFcst[key][q.label]) || 0;
+    var qActQTD = rollUpActualsQTD();
+    var qBudRaw = rollUpSource(budData);
+    var qFcstRaw = rollUpSource(fcstData);
+
+    /* Compute derived rows per quarter for each source */
+    function computeQuarterRows(qCatData, labels) {
+      var qComp = {};
+      labels.forEach(function (ql) {
+        var vals = computeRows(function (c) {
+          return (qCatData[c] && qCatData[c][ql]) || 0;
+        });
+        for (var k in vals) {
+          if (!qComp[k]) qComp[k] = {};
+          qComp[k][ql] = vals[k];
         }
       });
-      /* FY = sum of quarterly values */
+      return qComp;
+    }
+
+    var qLabels = QUARTERS.map(function (q) { return q.label; });
+
+    var actQTDComp = computeQuarterRows(qActQTD, qLabels);
+    var budComp    = computeQuarterRows(qBudRaw, qLabels.concat(['FY']));
+    var fcstComp   = computeQuarterRows(qFcstRaw, qLabels.concat(['FY']));
+
+    /* FY Total: closed-quarter actuals + forecast for open quarters */
+    var fyTotalCats = {};
+    for (var cat in allCats) {
       var fy = 0;
-      QUARTERS.forEach(function (q) { fy += qAct[key][q.label]; });
-      qAct[key]['FY'] = fy;
-    });
+      QUARTERS.forEach(function (q) {
+        if (quarterStatus[q.label] === 'closed') {
+          fy += (qActQTD[cat] && qActQTD[cat][q.label]) || 0;
+        } else {
+          fy += (qFcstRaw[cat] && qFcstRaw[cat][q.label]) || 0;
+        }
+      });
+      fyTotalCats[cat] = fy;
+    }
+    var fyTotalComp = computeRows(function (c) { return fyTotalCats[c] || 0; });
 
-    /* Re-compute FY pct rows for actuals from the FY totals */
-    var fyActRev = qAct['_totalRevenue']['FY'];
-    qAct['_gpPct']['FY'] = fyActRev !== 0 ? qAct['_grossProfit']['FY'] / fyActRev : 0;
-    qAct['_niPct']['FY'] = fyActRev !== 0 ? qAct['_netIncome']['FY'] / fyActRev : 0;
-    QUARTERS.forEach(function (q) {
-      var rev = qAct['_totalRevenue'][q.label];
-      qAct['_gpPct'][q.label] = rev !== 0 ? qAct['_grossProfit'][q.label] / rev : 0;
-      qAct['_niPct'][q.label] = rev !== 0 ? qAct['_netIncome'][q.label] / rev : 0;
-    });
-
-    /* FY Variance = Budget − Actuals (positive means under budget = favorable) */
-    var qVar = {};
-    allKeys.forEach(function (key) {
-      qVar[key] = {};
-      var budVal = (qBud[key] && qBud[key]['FY']) || 0;
-      var actVal = (qAct[key] && qAct[key]['FY']) || 0;
-      qVar[key]['FY'] = budVal - actVal;
-    });
-    /* Variance pct rows: budget pct - actuals pct */
-    ['_gpPct', '_niPct'].forEach(function (k) {
-      var budVal = (qBud[k] && qBud[k]['FY']) || 0;
-      var actVal = (qAct[k] && qAct[k]['FY']) || 0;
-      qVar[k]['FY'] = budVal - actVal;
-    });
+    /* FY Variance = FY Total - FY Budget */
+    var fyBudCats = {};
+    for (var bc in allCats) {
+      fyBudCats[bc] = (qBudRaw[bc] && qBudRaw[bc]['FY']) || 0;
+    }
+    var fyBudComp = computeRows(function (c) { return fyBudCats[c] || 0; });
 
     return {
-      qAct: qAct,
-      qBud: qBud,
-      qFcst: qFcst,
-      qVar: qVar,
-      quarterClosed: quarterClosed,
+      qActQTD: qActQTD,
+      actQTDComp: actQTDComp,
+      qBud: qBudRaw,
+      budComp: budComp,
+      qFcst: qFcstRaw,
+      fcstComp: fcstComp,
+      fyTotalCats: fyTotalCats,
+      fyTotalComp: fyTotalComp,
+      fyBudCats: fyBudCats,
+      fyBudComp: fyBudComp,
+      quarterStatus: quarterStatus,
       displayRows: PL_ROWS.slice()
     };
   }
@@ -491,32 +476,63 @@
 
   /* ── Render ── */
   function renderTable(result) {
-    var qAct  = result.qAct;
-    var qBud  = result.qBud;
-    var qFcst = result.qFcst;
-    var qVar  = result.qVar;
-    var quarterClosed = result.quarterClosed;
+    var qActQTD     = result.qActQTD;
+    var actQTDComp  = result.actQTDComp;
+    var qBud        = result.qBud;
+    var budComp     = result.budComp;
+    var qFcst       = result.qFcst;
+    var fcstComp    = result.fcstComp;
+    var fyTotalCats = result.fyTotalCats;
+    var fyTotalComp = result.fyTotalComp;
+    var fyBudCats   = result.fyBudCats;
+    var fyBudComp   = result.fyBudComp;
+    var quarterStatus = result.quarterStatus;
     var displayRows = result.displayRows;
     var table = document.getElementById('pl-table');
     var thead = document.getElementById('pl-thead');
     var tbody = document.getElementById('pl-tbody');
 
-    /* Q1-Q4 have 3 sub-cols; FY has 4 (act, bud, fcst, variance) */
-    var totalDataCols = (QUARTERS.length * 3) + 4;
+    /* Build column layout dynamically */
+    var colDefs = [];
+    QUARTERS.forEach(function (q) {
+      var st = quarterStatus[q.label];
+      if (st === 'closed') {
+        colDefs.push({ group: q.label, type: 'act', label: 'Actuals' });
+      } else if (st === 'partial') {
+        colDefs.push({ group: q.label, type: 'act', label: 'Actuals QTD' });
+      }
+      colDefs.push({ group: q.label, type: 'bud', label: 'Budget' });
+      colDefs.push({ group: q.label, type: 'fcst', label: 'Forecast' });
+    });
+    colDefs.push({ group: 'FY', type: 'total', label: 'Total' });
+    colDefs.push({ group: 'FY', type: 'bud',   label: 'Budget' });
+    colDefs.push({ group: 'FY', type: 'var',   label: 'Variance' });
+
+    var totalDataCols = colDefs.length;
+
+    /* Group spans for header row 1 */
+    var groupSpans = {};
+    colDefs.forEach(function (cd) {
+      groupSpans[cd.group] = (groupSpans[cd.group] || 0) + 1;
+    });
+    var groupOrder = [];
+    colDefs.forEach(function (cd) {
+      if (groupOrder.indexOf(cd.group) === -1) groupOrder.push(cd.group);
+    });
 
     /* Colgroup */
     var cg = document.createElement('colgroup');
     var c0 = document.createElement('col');
     c0.className = 'col-label';
     cg.appendChild(c0);
-    for (var ci = 0; ci < totalDataCols; ci++) {
+    colDefs.forEach(function (cd) {
       var c = document.createElement('col');
-      c.className = 'col-data';
+      c.className = cd.group === 'FY' ? 'col-data col-fy' : 'col-data';
       cg.appendChild(c);
-    }
+    });
     table.insertBefore(cg, thead);
 
-    /* Header row 1: Group labels */
+    /* Header row 1 */
     var tr1 = document.createElement('tr');
     tr1.className = 'header-months';
     var th0 = document.createElement('th');
@@ -525,46 +541,61 @@
     th0.rowSpan = 2;
     tr1.appendChild(th0);
 
-    QUARTERS.forEach(function (q) {
+    groupOrder.forEach(function (grp) {
       var th = document.createElement('th');
-      th.textContent = q.label;
-      th.colSpan = 3;
-      th.className = quarterClosed[q.label] ? 'quarter-group act' : 'quarter-group fcst';
+      th.colSpan = groupSpans[grp];
+      if (grp === 'FY') {
+        th.textContent = 'FY Total';
+        th.className = 'fy-total';
+      } else {
+        th.textContent = grp;
+        var st = quarterStatus[grp];
+        th.className = 'quarter-group' + (st === 'closed' ? ' act' : st === 'partial' ? ' partial' : ' fcst');
+      }
       tr1.appendChild(th);
     });
-
-    var thFY = document.createElement('th');
-    thFY.textContent = 'FY Total';
-    thFY.colSpan = 4;
-    thFY.className = 'fy-total';
-    tr1.appendChild(thFY);
     thead.appendChild(tr1);
 
-    /* Header row 2: Sub-column labels */
+    /* Header row 2 */
     var tr2 = document.createElement('tr');
     tr2.className = 'header-type';
-
-    QUARTERS.forEach(function (q) {
-      var closed = quarterClosed[q.label];
-      Q_SOURCES.forEach(function (src) {
-        var th = document.createElement('th');
-        if (src === 'act') {
-          th.textContent = closed ? 'Actuals' : 'Forecast';
-        } else {
-          th.textContent = Q_SOURCE_LABELS[src];
-        }
-        th.className = 'sub-' + src;
-        tr2.appendChild(th);
-      });
-    });
-
-    FY_SOURCES.forEach(function (src) {
+    colDefs.forEach(function (cd) {
       var th = document.createElement('th');
-      th.textContent = FY_SOURCE_LABELS[src];
-      th.className = 'sub-' + src + ' fy-sub';
+      th.textContent = cd.label;
+      th.className = 'sub-' + cd.type + (cd.group === 'FY' ? ' fy-sub' : '');
       tr2.appendChild(th);
     });
     thead.appendChild(tr2);
+
+    /* Helper: get value for a key from the right source */
+    function getVal(key, cd) {
+      var isComputed = key && key[0] === '_';
+
+      if (cd.group === 'FY') {
+        if (cd.type === 'total') {
+          return isComputed ? (fyTotalComp[key] || 0) : (fyTotalCats[key] || 0);
+        } else if (cd.type === 'bud') {
+          return isComputed ? (fyBudComp[key] || 0) : (fyBudCats[key] || 0);
+        } else if (cd.type === 'var') {
+          var totVal = isComputed ? (fyTotalComp[key] || 0) : (fyTotalCats[key] || 0);
+          var budVal = isComputed ? (fyBudComp[key] || 0) : (fyBudCats[key] || 0);
+          return totVal - budVal;
+        }
+      }
+
+      /* Quarter columns */
+      if (cd.type === 'act') {
+        if (isComputed) return (actQTDComp[key] && actQTDComp[key][cd.group]) || 0;
+        return (qActQTD[key] && qActQTD[key][cd.group]) || 0;
+      } else if (cd.type === 'bud') {
+        if (isComputed) return (budComp[key] && budComp[key][cd.group]) || 0;
+        return (qBud[key] && qBud[key][cd.group]) || 0;
+      } else if (cd.type === 'fcst') {
+        if (isComputed) return (fcstComp[key] && fcstComp[key][cd.group]) || 0;
+        return (qFcst[key] && qFcst[key][cd.group]) || 0;
+      }
+      return 0;
+    }
 
     /* Body */
     displayRows.forEach(function (def) {
@@ -592,56 +623,28 @@
         return;
       }
 
-      /* Label cell */
       var tdLabel = document.createElement('td');
       tdLabel.textContent = label;
       tr.appendChild(tdLabel);
 
       var isPct = type === 'pct';
 
-      /* Quarter columns (act, bud, fcst) */
-      QUARTERS.forEach(function (q) {
-        var actSrc  = qAct[key];
-        var budSrc  = qBud[key];
-        var fcstSrc = qFcst[key];
-
-        var vals = {
-          act:  actSrc  ? (actSrc[q.label]  || 0) : 0,
-          bud:  budSrc  ? (budSrc[q.label]  || 0) : 0,
-          fcst: fcstSrc ? (fcstSrc[q.label] || 0) : 0
-        };
-
-        Q_SOURCES.forEach(function (src) {
-          var td = document.createElement('td');
-          var val = vals[src];
-          td.textContent = isPct ? fmtPct(val) : fmt(val);
-          var cls = valClass(val);
-          if (cls) td.className = cls;
-          tr.appendChild(td);
-        });
-      });
-
-      /* FY columns (act, bud, fcst, variance) */
-      FY_SOURCES.forEach(function (src) {
+      colDefs.forEach(function (cd) {
         var td = document.createElement('td');
-        var dataSource;
-        if (src === 'act') dataSource = qAct[key];
-        else if (src === 'bud') dataSource = qBud[key];
-        else if (src === 'fcst') dataSource = qFcst[key];
-        else dataSource = qVar[key];
+        var val = getVal(key, cd);
 
-        var val = dataSource ? (dataSource['FY'] || 0) : 0;
+        td.textContent = isPct ? fmtPct(val) : fmt(val);
 
-        if (isPct) {
-          td.textContent = src === 'var' ? fmtPct(val) : fmtPct(val);
+        var cls = '';
+        if (cd.group === 'FY') cls = 'fy-total-cell';
+        if (cd.type === 'var') {
+          cls += (cls ? ' ' : '') + varClass(val) + ' var-cell';
         } else {
-          td.textContent = fmt(val);
+          var vc = valClass(val);
+          if (vc) cls += (cls ? ' ' : '') + vc;
         }
+        if (cls) td.className = cls;
 
-        td.className = 'fy-total-cell';
-        var cls = src === 'var' ? varClass(val) : valClass(val);
-        if (cls) td.className += ' ' + cls;
-        if (src === 'var') td.className += ' var-cell';
         tr.appendChild(td);
       });
 
