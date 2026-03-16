@@ -41,8 +41,6 @@
     ['Adj EBITDA as a % of Total Revenue', '_ebitdaPctRev',     'pct']
   ];
 
-  var CREDIT_CATS = ['Service Revenue'];
-
   var METRICS_MAP = {
     'Other Expense (Income)': 'Other Income/ Expense'
   };
@@ -320,8 +318,8 @@
       var isForecast = (src === 'GL_FORECAST' || src === 'FORECAST' || src === 'FCST');
       if (!isActual && !isBudget && !isForecast) continue;
 
-      var isCredit = CREDIT_CATS.indexOf(cat) !== -1;
-      var amt = (isCredit && isActual) ? rawAmt * -1 : rawAmt;
+      /* GL actuals are stored with opposite sign — negate all */
+      var amt = isActual ? rawAmt * -1 : rawAmt;
 
       if (isActual) {
         if (!actData[cat]) actData[cat] = {};

@@ -42,9 +42,6 @@
     ['Adj EBITDA as a % of Total Revenue', '_ebitdaPctRev',     'pct']
   ];
 
-  /* Categories stored as credits (negative) in ACTUALS only */
-  var CREDIT_CATS = ['Service Revenue'];
-
   var METRICS_MAP = {
     'Other Expense (Income)': 'Other Income/ Expense'
   };
@@ -324,8 +321,8 @@
 
       monthSet[mk] = true;
 
-      var isCredit = CREDIT_CATS.indexOf(cat) !== -1;
-      var amt = (isCredit && isActual) ? rawAmt * -1 : rawAmt;
+      /* GL actuals are stored with opposite sign — negate all */
+      var amt = isActual ? rawAmt * -1 : rawAmt;
 
       if (isActual) {
         if (!actData[cat]) actData[cat] = {};
