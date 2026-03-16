@@ -7,14 +7,16 @@
   'use strict';
 
   var SQL_QUERY = "SELECT `MONTH`, `Region`, `Column` as `SOURCE`, " +
-    "`Metrics`, SUM(`AMOUNT`) as `AMOUNT` " +
+    "`Metrics`, `Job Number`, `Parent Account`, `Operations Lead`, " +
+    "SUM(`AMOUNT`) as `AMOUNT` " +
     "FROM dataset " +
     "WHERE `Column` IN ('ACTUAL', 'GL_FORECAST', 'GL_BUDGET') " +
     "AND `Metrics` IN ('Service Revenue','Total Labor','Contract Expenses'," +
     "'Supplies & Materials','Field Overhead','HQ Overhead','Sales Overhead'," +
     "'Benefits & Taxes','Total Addbacks') " +
     "AND `Metrics` = `P&L Category Name` " +
-    "GROUP BY `MONTH`, `Region`, `Column`, `Metrics`";
+    "GROUP BY `MONTH`, `Region`, `Column`, `Metrics`, " +
+    "`Job Number`, `Parent Account`, `Operations Lead`";
 
   /* ── P&L Structure ── */
   var PL_ROWS = [
@@ -89,54 +91,128 @@
   var rawRows = null;
   var colIdx = null;
 
-  /* ── Multi-select Region filter ── */
-  var selectedRegions = {};
-  var allRegions = [];
-  var regionToggle = document.getElementById('region-toggle');
-  var regionDropdown = document.getElementById('region-dropdown');
+  /* ── Generic Multi-select Filter ── */
+  var filters = {};  /* id -> { all:[], selected:{}, toggle, dropdown, label } */
 
-  regionToggle.addEventListener('click', function (e) {
-    e.stopPropagation();
-    var open = !regionDropdown.classList.contains('hidden');
-    regionDropdown.classList.toggle('hidden');
-    regionToggle.classList.toggle('open');
-    if (open) refreshPL();
-  });
+  function createFilter(id, label) {
+    var f = {
+      all: [],
+      selected: {},
+      toggle: document.getElementById(id + '-toggle'),
+      dropdown: document.getElementById(id + '-dropdown'),
+      label: label,
+      defaultExclude: null
+    };
+    filters[id] = f;
 
-  document.addEventListener('click', function (e) {
-    if (!document.getElementById('region-multi').contains(e.target)) {
-      if (!regionDropdown.classList.contains('hidden')) {
-        regionDropdown.classList.add('hidden');
-        regionToggle.classList.remove('open');
-        refreshPL();
+    f.toggle.addEventListener('click', function (e) {
+      e.stopPropagation();
+      /* Close other dropdowns */
+      for (var fid in filters) {
+        if (fid !== id && !filters[fid].dropdown.classList.contains('hidden')) {
+          filters[fid].dropdown.classList.add('hidden');
+          filters[fid].toggle.classList.remove('open');
+        }
       }
+      var wasOpen = !f.dropdown.classList.contains('hidden');
+      f.dropdown.classList.toggle('hidden');
+      f.toggle.classList.toggle('open');
+      if (wasOpen) refreshPL();
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!document.getElementById(id + '-multi').contains(e.target)) {
+        if (!f.dropdown.classList.contains('hidden')) {
+          f.dropdown.classList.add('hidden');
+          f.toggle.classList.remove('open');
+          refreshPL();
+        }
+      }
+    });
+
+    return f;
+  }
+
+  function syncCheckboxes(f) {
+    var boxes = f.dropdown.querySelectorAll('input[type="checkbox"]');
+    boxes.forEach(function (cb) { cb.checked = !!f.selected[cb.value]; });
+  }
+
+  function updateLabel(f) {
+    var sel = f.all.filter(function (v) { return f.selected[v]; });
+    if (sel.length === 0) {
+      f.toggle.textContent = 'None selected';
+    } else if (sel.length === f.all.length) {
+      f.toggle.textContent = 'All ' + f.label;
+    } else if (sel.length <= 2) {
+      f.toggle.textContent = sel.join(', ');
+    } else {
+      f.toggle.textContent = sel.length + ' of ' + f.all.length;
     }
-  });
+  }
+
+  function populateFilter(f, values, defaultExcludeFn) {
+    f.all = values;
+    values.forEach(function (v) {
+      f.selected[v] = defaultExcludeFn ? !defaultExcludeFn(v) : true;
+    });
+
+    f.dropdown.innerHTML = '';
+    var actionsDiv = document.createElement('div');
+    actionsDiv.className = 'multi-select-actions';
+    var btnAll = document.createElement('button');
+    btnAll.textContent = 'Select All';
+    btnAll.addEventListener('click', function (e) {
+      e.stopPropagation();
+      f.all.forEach(function (v) { f.selected[v] = true; });
+      syncCheckboxes(f);
+      updateLabel(f);
+    });
+    var btnNone = document.createElement('button');
+    btnNone.textContent = 'Deselect All';
+    btnNone.addEventListener('click', function (e) {
+      e.stopPropagation();
+      f.all.forEach(function (v) { f.selected[v] = false; });
+      syncCheckboxes(f);
+      updateLabel(f);
+    });
+    actionsDiv.appendChild(btnAll);
+    actionsDiv.appendChild(btnNone);
+    f.dropdown.appendChild(actionsDiv);
+
+    values.forEach(function (v) {
+      var lbl = document.createElement('label');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = v;
+      cb.checked = f.selected[v];
+      cb.addEventListener('change', function (e) {
+        e.stopPropagation();
+        f.selected[v] = cb.checked;
+        updateLabel(f);
+      });
+      lbl.appendChild(cb);
+      lbl.appendChild(document.createTextNode(v));
+      f.dropdown.appendChild(lbl);
+    });
+    updateLabel(f);
+  }
+
+  /* Create filter instances */
+  var regionFilter  = createFilter('region', 'Regions');
+  var opsLeadFilter = createFilter('opslead', 'Ops Leads');
+  var jobFilter     = createFilter('job', 'Jobs');
+  var accountFilter = createFilter('account', 'Accounts');
 
   document.getElementById('filter-clear').addEventListener('click', function () {
-    allRegions.forEach(function (r) { selectedRegions[r] = true; });
-    syncRegionCheckboxes();
-    updateRegionLabel();
+    for (var id in filters) {
+      var f = filters[id];
+      f.all.forEach(function (v) { f.selected[v] = true; });
+      syncCheckboxes(f);
+      updateLabel(f);
+    }
     refreshPL();
   });
-
-  function syncRegionCheckboxes() {
-    var boxes = regionDropdown.querySelectorAll('input[type="checkbox"]');
-    boxes.forEach(function (cb) { cb.checked = !!selectedRegions[cb.value]; });
-  }
-
-  function updateRegionLabel() {
-    var sel = allRegions.filter(function (r) { return selectedRegions[r]; });
-    if (sel.length === 0) {
-      regionToggle.textContent = 'None selected';
-    } else if (sel.length === allRegions.length) {
-      regionToggle.textContent = 'All Regions';
-    } else if (sel.length <= 3) {
-      regionToggle.textContent = sel.join(', ');
-    } else {
-      regionToggle.textContent = sel.length + ' of ' + allRegions.length + ' regions';
-    }
-  }
 
   /* ── Data Loading (SQL) ── */
   function loadData() {
@@ -166,7 +242,10 @@
       amount:  findCol(cols, ['AMOUNT', 'Amount']),
       source:  findCol(cols, ['SOURCE', 'Source', 'Column']),
       metrics: findCol(cols, ['Metrics', 'METRICS', 'Metric']),
-      region:  findCol(cols, ['Region', 'region', 'REGION'])
+      region:  findCol(cols, ['Region', 'region', 'REGION']),
+      job:     findCol(cols, ['Job Number', 'JobNumber', 'JOB_NUMBER']),
+      account: findCol(cols, ['Parent Account', 'ParentAccount', 'PARENT_ACCOUNT']),
+      opsLead: findCol(cols, ['Operations Lead', 'OperationsLead', 'OpsLead', 'OPS_LEAD'])
     };
 
     if (colIdx.month === -1 || colIdx.amount === -1 || colIdx.metrics === -1) {
@@ -186,69 +265,50 @@
     return -1;
   }
 
-  /* ── Populate region multi-select ── */
+  /* ── Populate all filters ── */
   function populateFilters() {
-    var regionSet = {};
-    if (colIdx.region !== -1) {
+    function collectUnique(idx) {
+      var set = {};
+      if (idx === -1) return [];
       for (var r = 0; r < rawRows.length; r++) {
-        var v = rawRows[r][colIdx.region];
-        if (v) regionSet[v] = true;
+        var v = rawRows[r][idx];
+        if (v) set[v] = true;
       }
+      return Object.keys(set).sort();
     }
-    allRegions = Object.keys(regionSet).sort();
 
-    allRegions.forEach(function (r) {
-      selectedRegions[r] = r.toUpperCase() !== 'HQ';
-    });
-
-    var actionsDiv = document.createElement('div');
-    actionsDiv.className = 'multi-select-actions';
-    var btnAll = document.createElement('button');
-    btnAll.textContent = 'Select All';
-    btnAll.addEventListener('click', function (e) {
-      e.stopPropagation();
-      allRegions.forEach(function (r) { selectedRegions[r] = true; });
-      syncRegionCheckboxes();
-      updateRegionLabel();
-    });
-    var btnNone = document.createElement('button');
-    btnNone.textContent = 'Deselect All';
-    btnNone.addEventListener('click', function (e) {
-      e.stopPropagation();
-      allRegions.forEach(function (r) { selectedRegions[r] = false; });
-      syncRegionCheckboxes();
-      updateRegionLabel();
-    });
-    actionsDiv.appendChild(btnAll);
-    actionsDiv.appendChild(btnNone);
-    regionDropdown.appendChild(actionsDiv);
-
-    allRegions.forEach(function (rgn) {
-      var lbl = document.createElement('label');
-      var cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.value = rgn;
-      cb.checked = selectedRegions[rgn];
-      cb.addEventListener('change', function (e) {
-        e.stopPropagation();
-        selectedRegions[rgn] = cb.checked;
-        updateRegionLabel();
-      });
-      lbl.appendChild(cb);
-      lbl.appendChild(document.createTextNode(rgn));
-      regionDropdown.appendChild(lbl);
-    });
-
-    updateRegionLabel();
+    populateFilter(regionFilter, collectUnique(colIdx.region),
+      function (v) { return v.toUpperCase() === 'HQ'; });
+    populateFilter(opsLeadFilter, collectUnique(colIdx.opsLead));
+    populateFilter(jobFilter, collectUnique(colIdx.job));
+    populateFilter(accountFilter, collectUnique(colIdx.account));
   }
 
   /* ── Get filtered rows ── */
   function getFilteredRows() {
-    if (colIdx.region === -1) return rawRows;
-    var allSelected = allRegions.every(function (r) { return selectedRegions[r]; });
-    if (allSelected) return rawRows;
+    var filterDefs = [
+      { idx: colIdx.region,  f: regionFilter },
+      { idx: colIdx.opsLead, f: opsLeadFilter },
+      { idx: colIdx.job,     f: jobFilter },
+      { idx: colIdx.account, f: accountFilter }
+    ];
+
+    /* Build active filters (skip if column missing or all selected) */
+    var active = [];
+    filterDefs.forEach(function (fd) {
+      if (fd.idx === -1 || fd.f.all.length === 0) return;
+      var allSel = fd.f.all.every(function (v) { return fd.f.selected[v]; });
+      if (!allSel) active.push(fd);
+    });
+
+    if (active.length === 0) return rawRows;
+
     return rawRows.filter(function (row) {
-      return !!selectedRegions[row[colIdx.region]];
+      for (var i = 0; i < active.length; i++) {
+        var fd = active[i];
+        if (!fd.f.selected[row[fd.idx]]) return false;
+      }
+      return true;
     });
   }
 
