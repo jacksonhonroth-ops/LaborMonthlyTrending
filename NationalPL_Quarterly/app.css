@@ -44,6 +44,10 @@ body {
   color: #1b7a3d;
 }
 
+.legend-bud {
+  color: #7c5c20;
+}
+
 .legend-fcst {
   color: #2563a8;
 }
@@ -235,8 +239,8 @@ body {
   font-size: 11px;
 }
 
-#pl-table col.col-label { width: 180px; }
-#pl-table col.col-data  { width: 120px; }
+#pl-table col.col-label { width: 170px; }
+#pl-table col.col-data  { width: 95px; }
 
 /* ── Header Rows ── */
 #pl-table thead {
@@ -271,12 +275,24 @@ body {
   background: #2563a8;
 }
 
-#pl-table thead tr.header-months th.mixed {
-  background: linear-gradient(135deg, #1b7a3d 50%, #2563a8 50%);
+#pl-table thead tr.header-months th.quarter-group {
+  background: #4a5568;
+  border-right: 2px solid #2d3748;
+}
+
+#pl-table thead tr.header-months th.quarter-group.act {
+  background: #1b7a3d;
+  border-right: 2px solid #145c2e;
+}
+
+#pl-table thead tr.header-months th.quarter-group.fcst {
+  background: #2563a8;
+  border-right: 2px solid #1d4e8a;
 }
 
 #pl-table thead tr.header-months th.fy-total {
   background: #3a3f51;
+  border-left: 3px solid #1a1a2e;
 }
 
 /* Sub-header row: ACT / FCST labels */
@@ -306,14 +322,29 @@ body {
   color: #fff;
 }
 
-#pl-table thead tr.header-type th.mixed {
-  background: linear-gradient(135deg, #22964a 50%, #3b82d6 50%);
+/* Sub-header source labels */
+#pl-table thead tr.header-type th.sub-act {
+  background: #1b7a3d;
   color: #fff;
 }
 
-#pl-table thead tr.header-type th.fy-total {
-  background: #4a4f63;
+#pl-table thead tr.header-type th.sub-bud {
+  background: #7c5c20;
   color: #fff;
+}
+
+#pl-table thead tr.header-type th.sub-fcst {
+  background: #2563a8;
+  color: #fff;
+}
+
+#pl-table thead tr.header-type th.sub-var {
+  background: #5b3a8c;
+  color: #fff;
+}
+
+#pl-table thead tr.header-type th.fy-sub {
+  border-top: 1px solid rgba(255,255,255,0.2);
 }
 
 /* ── Body Rows ── */
@@ -409,6 +440,21 @@ td.fy-total-cell {
   font-weight: 600;
   border-left: 2px solid #ccc;
   border-right: 2px solid #ccc;
+}
+
+/* Variance column */
+td.var-cell {
+  border-left: 2px solid #5b3a8c;
+}
+
+/* Positive variance (under budget = favorable) */
+.val-positive {
+  color: #1b7a3d;
+}
+
+/* Quarter group separator */
+#pl-table tbody td:nth-child(4n+1) {
+  border-right: 2px solid #ddd;
 }
 
 /* ── Responsive ── */
