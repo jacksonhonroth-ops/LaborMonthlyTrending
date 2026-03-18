@@ -256,8 +256,10 @@
       if (laborCategories.indexOf(category) !== -1) {
         target[monthKey].labor += amount;
       } else if (category === revenueCategory) {
-        // Revenue is stored as negative (credit convention) — negate to positive
-        target[monthKey].revenue += amount * -1;
+        // ACTUAL revenue is stored as negative (credit convention) — negate to positive
+        // Budget revenue is already positive — use as-is
+        var rev = (source === sourceActual) ? amount * -1 : amount;
+        target[monthKey].revenue += rev;
       }
     }
 
