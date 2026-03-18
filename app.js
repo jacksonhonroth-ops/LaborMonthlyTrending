@@ -135,13 +135,13 @@
 
   // ─── Data Loading — SQL pre-filtered to only needed categories/sources ──
 
-  // SQL uses manifest ALIAS names (not raw column names) when referencing via FROM dataset
+  // SQL filters by SOURCE only — category filtering done client-side
+  // (budget rows use different P&L category values than actuals)
   var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `PLCategoryName`, " +
     "`Region`, `JobNumber`, `ParentAccount`, `OperationsLead`, " +
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
     "WHERE `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET') " +
-    "AND `PLCategoryName` IN ('Total Labor', 'Service Revenue') " +
     "GROUP BY `MONTH`, `SOURCE`, `PLCategoryName`, `Region`, " +
     "`JobNumber`, `ParentAccount`, `OperationsLead`";
 
