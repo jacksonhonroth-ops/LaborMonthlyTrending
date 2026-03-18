@@ -170,6 +170,24 @@
 
         console.log('[LaborMOM] Columns:', JSON.stringify(resp.columns));
         console.log('[LaborMOM] Rows returned:', resp.rows.length);
+        console.log('[LaborMOM] colIndices:', JSON.stringify(colIndices));
+
+        // Debug: log ALL unique SOURCE values from SQL result
+        var allSources = {};
+        var allCats = {};
+        var srcIdx = colIndices.source;
+        var catIdx = colIndices.category;
+        for (var i = 0; i < Math.min(resp.rows.length, 500000); i++) {
+          var sv = resp.rows[i][srcIdx];
+          var cv = resp.rows[i][catIdx];
+          allSources[String(sv)] = (allSources[String(sv)] || 0) + 1;
+          if (i < 100000) allCats[String(cv)] = (allCats[String(cv)] || 0) + 1;
+        }
+        console.log('[LaborMOM] ALL SOURCE values:', JSON.stringify(allSources));
+        console.log('[LaborMOM] Category values (sample):', JSON.stringify(allCats));
+        if (resp.rows.length > 0) {
+          console.log('[LaborMOM] First row:', JSON.stringify(resp.rows[0]));
+        }
 
         populateFilters();
         refreshView();
