@@ -133,38 +133,42 @@
     loadData();
   }
 
-  // ─── Data Loading — uses domo.get (original working approach) ─────────
+  // ─── Data Loading — SQL pre-filtered to only needed categories/sources ──
+
+  var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `P&L Category Name` as `Category`, " +
+    "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
+    "SUM(`Amount`) as `Amount` " +
+    "FROM dataset " +
+    "WHERE `SOURCE` IN ('ACTUAL', 'GL_FORECAST') " +
+    "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
+    "GROUP BY `MONTH`, `SOURCE`, `P&L Category Name`, `Region`, " +
+    "`JobNumber`, `Parent Account`, `Operations Lead`";
 
   function loadData() {
     if (typeof domo === 'undefined') {
       showError('domo.js not loaded');
       return;
     }
-    var query = "/data/v1/" + datasets[0];
-    domo.get(query, { format: "array-of-arrays" })
-      .then(function (data) {
+    domo.post('/sql/v1/dataset', SQL_QUERY, { contentType: 'text/plain' })
+      .then(function (resp) {
         if (loaderText) loaderText.textContent = "Building chart...";
-        rawData = data;
+        rawData = {
+          columns: resp.columns,
+          rows: resp.rows
+        };
         colIndices = {
-          month: findCol(data.columns, ["MONTH", "Month", "month"]),
-          amount: findCol(data.columns, ["Amount", "amount", "AMOUNT"]),
-          category: findCol(data.columns, ["PLCategoryName", "P&L Category Name", "P&L_Category_Name"]),
-          source: findCol(data.columns, ["SOURCE", "Source", "source"]),
-          region: findCol(data.columns, ["Region", "region", "REGION"]),
-          job: findCol(data.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
-          account: findCol(data.columns, ["ParentAccount", "Parent Account", "PARENT_ACCOUNT"]),
-          opsLead: findCol(data.columns, ["OperationsLead", "Operations Lead", "OpsLead", "OPS_LEAD"])
+          month: findCol(resp.columns, ["MONTH", "Month", "month"]),
+          amount: findCol(resp.columns, ["Amount", "amount", "AMOUNT"]),
+          category: findCol(resp.columns, ["Category", "P&L Category Name", "PLCategoryName"]),
+          source: findCol(resp.columns, ["SOURCE", "Source", "source"]),
+          region: findCol(resp.columns, ["Region", "region", "REGION"]),
+          job: findCol(resp.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
+          account: findCol(resp.columns, ["Parent Account", "ParentAccount", "PARENT_ACCOUNT"]),
+          opsLead: findCol(resp.columns, ["Operations Lead", "OperationsLead", "OpsLead", "OPS_LEAD"])
         };
 
-        // Log discovered sources for debugging
-        var srcSet = {};
-        for (var i = 0; i < data.rows.length; i++) {
-          var s = data.rows[i][colIndices.source];
-          if (s) srcSet[s] = (srcSet[s] || 0) + 1;
-        }
-        console.log('[LaborMOM] Sources found:', JSON.stringify(srcSet));
-        console.log('[LaborMOM] Columns:', JSON.stringify(data.columns));
-        console.log('[LaborMOM] Total rows:', data.rows.length);
+        console.log('[LaborMOM] Columns:', JSON.stringify(resp.columns));
+        console.log('[LaborMOM] Rows returned:', resp.rows.length);
 
         populateFilters();
         refreshView();
@@ -172,7 +176,7 @@
       })
       .catch(function (err) {
         var msg = err && err.message ? err.message : JSON.stringify(err);
-        showError('Load error: ' + msg);
+        showError('SQL error: ' + msg);
       });
   }
 
