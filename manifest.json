@@ -9,12 +9,12 @@
          "fields": [
             { "alias": "GLPostingDate", "columnName": "GLPostingDate" },
             { "alias": "Amount", "columnName": "Amount" },
-            { "alias": "PLCategory", "columnName": "P&L Category" },
+            { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
             { "alias": "SOURCE", "columnName": "SOURCE" },
             { "alias": "Region", "columnName": "Region" },
             { "alias": "JobNumber", "columnName": "JobNumber" },
             { "alias": "ParentAccount", "columnName": "Parent Account" },
-            { "alias": "OpsLead", "columnName": "Ops Lead" }
+            { "alias": "OpsLead", "columnName": "Operations Lead" }
          ]
       }
    ],
