@@ -48,6 +48,10 @@ body {
   color: #2563a8;
 }
 
+.legend-bud {
+  color: #7c5c20;
+}
+
 /* ── Filter Bar ── */
 #filter-bar {
   display: flex;
@@ -76,35 +80,6 @@ body {
   color: #8e99a4;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-}
-
-.filter-group select,
-.filter-group input[type="text"] {
-  padding: 5px 8px;
-  border: 1px solid #dce1e8;
-  border-radius: 5px;
-  font-size: 11px;
-  font-family: inherit;
-  color: #333;
-  background: #fff;
-  transition: border-color 0.2s;
-}
-
-.filter-group select {
-  appearance: none;
-  -webkit-appearance: none;
-  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E") no-repeat right 8px center;
-  padding-right: 24px;
-  cursor: pointer;
-}
-
-.filter-group input[type="text"]::placeholder { color: #aab; }
-
-.filter-group select:focus,
-.filter-group input[type="text"]:focus {
-  outline: none;
-  border-color: #2563a8;
-  box-shadow: 0 0 0 2px rgba(37, 99, 168, 0.12);
 }
 
 /* ── Multi-Select ── */
@@ -269,10 +244,14 @@ body {
 #pl-table col.col-data  { width: 90px; }
 
 /* ── Header Rows ── */
-#pl-table thead {
+#pl-table thead th {
   position: sticky;
   top: 0;
   z-index: 5;
+}
+
+#pl-table thead tr.header-type th {
+  top: 28px; /* offset below first header row */
 }
 
 /* Top header row: Month labels */
@@ -285,6 +264,7 @@ body {
   border-bottom: none;
   border-right: 1px solid rgba(255,255,255,0.2);
   white-space: nowrap;
+  background: #3a3f51;
 }
 
 #pl-table thead tr.header-months th.col-label-header {
@@ -306,13 +286,12 @@ body {
   background: #3a3f51;
 }
 
-#pl-table thead tr.header-months th.budget-col {
-  background: #6b5b95;
+#pl-table thead tr.header-months th.budget-header {
+  background: #7c5c20;
 }
 
-#pl-table thead tr.header-months th.var-col {
-  background: #e67e22;
-  color: #fff;
+#pl-table thead tr.header-months th.var-header {
+  background: #5b3a8c;
 }
 
 /* Sub-header row: ACT / FCST labels */
@@ -325,11 +304,7 @@ body {
   letter-spacing: 0.5px;
   border-bottom: 2px solid #ccc;
   border-right: 1px solid rgba(255,255,255,0.2);
-}
-
-#pl-table thead tr.header-type th.col-label-header {
   background: #3a3f51;
-  border-right: 1px solid #555;
 }
 
 #pl-table thead tr.header-type th.act {
@@ -344,16 +319,6 @@ body {
 
 #pl-table thead tr.header-type th.fy-total {
   background: #4a4f63;
-  color: #fff;
-}
-
-#pl-table thead tr.header-type th.budget-col {
-  background: #7d6da8;
-  color: #fff;
-}
-
-#pl-table thead tr.header-type th.var-col {
-  background: #f0923e;
   color: #fff;
 }
 
@@ -453,12 +418,15 @@ td.fy-total-cell {
 }
 
 td.budget-cell {
-  background: #f9f5ff;
+  background: #faf8f0;
+  font-weight: 600;
+  border-left: 2px solid #7c5c20;
 }
 
 td.var-cell {
-  background: #fff8f0;
+  background: #f8f5fc;
   font-weight: 600;
+  border-left: 2px solid #5b3a8c;
 }
 
 /* ── Responsive ── */
