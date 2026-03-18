@@ -32,7 +32,6 @@
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
   ];
 
-  // Find a column index by trying multiple possible names
   function findCol(columns, names) {
     for (var i = 0; i < names.length; i++) {
       var idx = columns.indexOf(names[i]);
@@ -41,7 +40,6 @@
     return -1;
   }
 
-  // Parse a DOMO date value to a Date object (handles epoch ms and ISO strings)
   function parseDate(raw) {
     if (typeof raw === "number") return new Date(raw);
     var s = String(raw);
@@ -49,49 +47,143 @@
     return new Date(s);
   }
 
-  var loader = document.getElementById("loader");
-  var loaderText = document.getElementById("loader-text");
+  // All DOM refs — populated in boot()
+  var loader, loaderText;
+  var filterRegion, filterOps, filterJob, filterAccount, jobList, accountList;
+  var btnChart, btnTable, chartContainer, tableContainer;
 
-  loaderText.textContent = "Fetching from Job Financials...";
-
-  // Store raw data for drill-down and filtering
+  // State
   var rawRows = null;
   var colIndices = null;
   var chartInstance = null;
-  var currentView = "chart"; // "chart" or "table"
+  var currentView = "chart";
 
-  domo.post('/sql/v1/dataset', SQL_QUERY, { contentType: 'text/plain' })
-    .then(function (resp) {
-      loaderText.textContent = "Building chart...";
-      var cols = resp.columns;
-      rawRows = resp.rows;
-      colIndices = {
-        month: findCol(cols, ["MONTH", "Month", "month"]),
-        amount: findCol(cols, ["Amount", "amount", "AMOUNT"]),
-        category: findCol(cols, ["Category", "P&L Category Name", "PLCategoryName"]),
-        source: findCol(cols, ["SOURCE", "Source", "source"]),
-        region: findCol(cols, ["Region", "region", "REGION"]),
-        job: findCol(cols, ["JobNumber", "Job Number", "JOB_NUMBER"]),
-        account: findCol(cols, ["Parent Account", "ParentAccount", "PARENT_ACCOUNT"]),
-        opsLead: findCol(cols, ["Operations Lead", "OperationsLead", "OpsLead", "OPS_LEAD"])
-      };
-      populateFilters();
-      refreshView();
-      loader.classList.add("hidden");
-    })
-    .catch(function (err) {
-      var msg = err && err.message ? err.message : JSON.stringify(err);
-      loaderText.textContent = "SQL error: " + msg;
+  function boot() {
+    loader = document.getElementById("loader");
+    loaderText = document.getElementById("loader-text");
+    filterRegion = document.getElementById("filter-region");
+    filterOps = document.getElementById("filter-ops");
+    filterJob = document.getElementById("filter-job");
+    filterAccount = document.getElementById("filter-account");
+    jobList = document.getElementById("job-list");
+    accountList = document.getElementById("account-list");
+    btnChart = document.getElementById("btn-chart");
+    btnTable = document.getElementById("btn-table");
+    chartContainer = document.getElementById("chart-container");
+    tableContainer = document.getElementById("table-container");
+
+    if (loaderText) loaderText.textContent = "Fetching from Job Financials...";
+
+    // Filter change listeners
+    if (filterRegion) filterRegion.addEventListener("change", refreshView);
+    if (filterOps) filterOps.addEventListener("change", refreshView);
+
+    var searchTimer = null;
+    [filterJob, filterAccount].forEach(function (el) {
+      if (!el) return;
+      el.addEventListener("input", function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(refreshView, 300);
+      });
+      el.addEventListener("change", refreshView);
     });
 
-  // ─── Filters ──────────────────────────────────────────────────────────
+    var clearBtn = document.getElementById("filter-clear");
+    if (clearBtn) {
+      clearBtn.addEventListener("click", function () {
+        if (filterRegion) filterRegion.value = "";
+        if (filterOps) filterOps.value = "";
+        if (filterJob) filterJob.value = "";
+        if (filterAccount) filterAccount.value = "";
+        refreshView();
+      });
+    }
 
-  var filterRegion = document.getElementById("filter-region");
-  var filterOps = document.getElementById("filter-ops");
-  var filterJob = document.getElementById("filter-job");
-  var filterAccount = document.getElementById("filter-account");
-  var jobList = document.getElementById("job-list");
-  var accountList = document.getElementById("account-list");
+    // View toggle
+    if (btnChart) {
+      btnChart.addEventListener("click", function () {
+        if (currentView === "chart") return;
+        currentView = "chart";
+        btnChart.classList.add("active");
+        if (btnTable) btnTable.classList.remove("active");
+        if (chartContainer) chartContainer.classList.remove("hidden");
+        if (tableContainer) tableContainer.classList.add("hidden");
+        refreshView();
+      });
+    }
+
+    if (btnTable) {
+      btnTable.addEventListener("click", function () {
+        if (currentView === "table") return;
+        currentView = "table";
+        btnTable.classList.add("active");
+        if (btnChart) btnChart.classList.remove("active");
+        if (tableContainer) tableContainer.classList.remove("hidden");
+        if (chartContainer) chartContainer.classList.add("hidden");
+        refreshView();
+      });
+    }
+
+    // Drill-down close
+    var ddClose = document.getElementById("drilldown-close");
+    if (ddClose) {
+      ddClose.addEventListener("click", function () {
+        var ov = document.getElementById("drilldown-overlay");
+        if (ov) ov.classList.add("hidden");
+      });
+    }
+
+    var ddOverlay = document.getElementById("drilldown-overlay");
+    if (ddOverlay) {
+      ddOverlay.addEventListener("click", function (e) {
+        if (e.target === this) this.classList.add("hidden");
+      });
+    }
+
+    // Load data via SQL
+    loadData();
+  }
+
+  function loadData() {
+    if (typeof domo === 'undefined' || !domo.post) {
+      showError('domo.js not loaded');
+      return;
+    }
+    domo.post('/sql/v1/dataset', SQL_QUERY, { contentType: 'text/plain' })
+      .then(function (resp) {
+        if (loaderText) loaderText.textContent = "Building chart...";
+        var cols = resp.columns;
+        rawRows = resp.rows;
+        colIndices = {
+          month: findCol(cols, ["MONTH", "Month", "month"]),
+          amount: findCol(cols, ["Amount", "amount", "AMOUNT"]),
+          category: findCol(cols, ["Category", "P&L Category Name", "PLCategoryName"]),
+          source: findCol(cols, ["SOURCE", "Source", "source"]),
+          region: findCol(cols, ["Region", "region", "REGION"]),
+          job: findCol(cols, ["JobNumber", "Job Number", "JOB_NUMBER"]),
+          account: findCol(cols, ["Parent Account", "ParentAccount", "PARENT_ACCOUNT"]),
+          opsLead: findCol(cols, ["Operations Lead", "OperationsLead", "OpsLead", "OPS_LEAD"])
+        };
+        populateFilters();
+        refreshView();
+        if (loader) loader.classList.add("hidden");
+      })
+      .catch(function (err) {
+        var msg = err && err.message ? err.message : JSON.stringify(err);
+        showError('SQL error: ' + msg);
+      });
+  }
+
+  function showError(msg) {
+    if (loaderText) {
+      loaderText.textContent = msg;
+    } else {
+      var el = document.getElementById("loader-text");
+      if (el) el.textContent = msg;
+    }
+  }
+
+  // ─── Filters ──────────────────────────────────────────────────────────
 
   function populateFilters() {
     var regions = {};
@@ -118,6 +210,7 @@
   }
 
   function fillSelect(el, values) {
+    if (!el) return;
     values.forEach(function (v) {
       var opt = document.createElement("option");
       opt.value = v;
@@ -127,6 +220,7 @@
   }
 
   function fillDatalist(el, values) {
+    if (!el) return;
     values.forEach(function (v) {
       var opt = document.createElement("option");
       opt.value = v;
@@ -134,35 +228,11 @@
     });
   }
 
-  // Filter change listeners — dropdowns
-  [filterRegion, filterOps].forEach(function (el) {
-    el.addEventListener("change", refreshView);
-  });
-
-  // Search inputs — debounced refresh on input
-  var searchTimer = null;
-  [filterJob, filterAccount].forEach(function (el) {
-    el.addEventListener("input", function () {
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(refreshView, 300);
-    });
-    el.addEventListener("change", refreshView);
-  });
-
-  document.getElementById("filter-clear").addEventListener("click", function () {
-    filterRegion.value = "";
-    filterOps.value = "";
-    filterJob.value = "";
-    filterAccount.value = "";
-    refreshView();
-  });
-
-  // Apply filters to raw rows
   function getFilteredRows() {
-    var rVal = filterRegion.value;
-    var oVal = filterOps.value;
-    var jVal = filterJob.value.trim();
-    var aVal = filterAccount.value.trim();
+    var rVal = filterRegion ? filterRegion.value : "";
+    var oVal = filterOps ? filterOps.value : "";
+    var jVal = filterJob ? filterJob.value.trim() : "";
+    var aVal = filterAccount ? filterAccount.value.trim() : "";
 
     if (!rVal && !jVal && !aVal && !oVal) return rawRows;
 
@@ -184,33 +254,6 @@
       return true;
     });
   }
-
-  // ─── View toggle ──────────────────────────────────────────────────────
-
-  var btnChart = document.getElementById("btn-chart");
-  var btnTable = document.getElementById("btn-table");
-  var chartContainer = document.getElementById("chart-container");
-  var tableContainer = document.getElementById("table-container");
-
-  btnChart.addEventListener("click", function () {
-    if (currentView === "chart") return;
-    currentView = "chart";
-    btnChart.classList.add("active");
-    btnTable.classList.remove("active");
-    chartContainer.classList.remove("hidden");
-    tableContainer.classList.add("hidden");
-    refreshView();
-  });
-
-  btnTable.addEventListener("click", function () {
-    if (currentView === "table") return;
-    currentView = "table";
-    btnTable.classList.add("active");
-    btnChart.classList.remove("active");
-    tableContainer.classList.remove("hidden");
-    chartContainer.classList.add("hidden");
-    refreshView();
-  });
 
   // ─── Refresh ──────────────────────────────────────────────────────────
 
@@ -256,18 +299,15 @@
       if (laborCategories.indexOf(category) !== -1) {
         target[monthKey].labor += amount;
       } else if (category === revenueCategory) {
-        // Revenue is stored as negative (credit convention) — negate to positive
         target[monthKey].revenue += amount * -1;
       }
     }
 
-    // Build sorted month keys from all data
     var allKeys = {};
     Object.keys(actual).forEach(function (k) { allKeys[k] = true; });
     Object.keys(forecast).forEach(function (k) { allKeys[k] = true; });
     var sortedKeys = Object.keys(allKeys).sort();
 
-    // Determine current month key — months not yet closed should be FCST
     var now = new Date();
     var curMonthKey = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
 
@@ -336,7 +376,6 @@
       return m + "\n(" + monthSources[i] + ")";
     });
 
-    // MOM changes
     var momLaborChange = [];
     var momDLChange = [];
     for (var i = 0; i < actualLabor.length; i++) {
@@ -354,7 +393,9 @@
       chartInstance = null;
     }
 
-    var ctx = document.getElementById("trendChart").getContext("2d");
+    var canvas = document.getElementById("trendChart");
+    if (!canvas) return;
+    var ctx = canvas.getContext("2d");
 
     chartInstance = new Chart(ctx, {
       type: "bar",
@@ -428,9 +469,7 @@
           intersect: false
         },
         plugins: {
-          legend: {
-            display: false
-          },
+          legend: { display: false },
           tooltip: {
             backgroundColor: "rgba(0,0,0,0.8)",
             titleFont: { size: 13, weight: "600" },
@@ -445,16 +484,14 @@
 
                 if (label.indexOf("Labor $") !== -1) {
                   var formatted = "$" + value.toLocaleString("en-US", {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0
+                    minimumFractionDigits: 0, maximumFractionDigits: 0
                   });
                   if (label === "Actual Labor $") {
                     var mom = momLaborChange[idx];
                     if (mom !== null) {
                       var sign = mom >= 0 ? "+" : "";
                       formatted += "  (" + sign + "$" + mom.toLocaleString("en-US", {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0
+                        minimumFractionDigits: 0, maximumFractionDigits: 0
                       }) + " MOM)";
                     }
                   }
@@ -462,8 +499,7 @@
                     var variance = actualLabor[idx] - budgetLabor[idx];
                     var sign2 = variance >= 0 ? "+" : "";
                     formatted += "  (var: " + sign2 + "$" + variance.toLocaleString("en-US", {
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 0
+                      minimumFractionDigits: 0, maximumFractionDigits: 0
                     }) + ")";
                   }
                   return "  " + label + ": " + formatted;
@@ -494,25 +530,19 @@
         scales: {
           x: {
             grid: { display: false },
-            ticks: {
-              font: { size: 11 },
-              color: "#888"
-            }
+            ticks: { font: { size: 11 }, color: "#888" }
           },
           yDollars: {
             type: "linear",
             position: "left",
             beginAtZero: true,
             title: {
-              display: true,
-              text: "Labor $",
-              font: { size: 12, weight: "600" },
-              color: "#4a90d9"
+              display: true, text: "Labor $",
+              font: { size: 12, weight: "600" }, color: "#4a90d9"
             },
             grid: { color: "rgba(0,0,0,0.06)" },
             ticks: {
-              font: { size: 11 },
-              color: "#888",
+              font: { size: 11 }, color: "#888",
               callback: function (value) {
                 if (value >= 1000000) return "$" + (value / 1000000).toFixed(1) + "M";
                 if (value >= 1000) return "$" + (value / 1000).toFixed(0) + "K";
@@ -525,18 +555,13 @@
             position: "right",
             beginAtZero: true,
             title: {
-              display: true,
-              text: "DL %",
-              font: { size: 12, weight: "600" },
-              color: "#e8833a"
+              display: true, text: "DL %",
+              font: { size: 12, weight: "600" }, color: "#e8833a"
             },
             grid: { drawOnChartArea: false },
             ticks: {
-              font: { size: 11 },
-              color: "#888",
-              callback: function (value) {
-                return value.toFixed(0) + "%";
-              }
+              font: { size: 11 }, color: "#888",
+              callback: function (value) { return value.toFixed(0) + "%"; }
             }
           }
         },
@@ -555,6 +580,7 @@
   function buildTable(data) {
     var thead = document.getElementById("summary-thead");
     var tbody = document.getElementById("summary-tbody");
+    if (!thead || !tbody) return;
     thead.innerHTML = "";
     tbody.innerHTML = "";
 
@@ -646,8 +672,7 @@
     td.className = "num";
     var prefix = value < 0 ? "-$" : "$";
     td.textContent = prefix + Math.abs(value).toLocaleString("en-US", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
+      minimumFractionDigits: 0, maximumFractionDigits: 0
     });
     return td;
   }
@@ -660,18 +685,19 @@
     return td;
   }
 
-  // ─── Drill-down table ─────────────────────────────────────────────────
+  // ─── Drill-down ───────────────────────────────────────────────────────
 
   function showDrilldown(monthKey) {
     var overlay = document.getElementById("drilldown-overlay");
     var title = document.getElementById("drilldown-title");
     var thead = document.getElementById("drilldown-thead");
     var tbody = document.getElementById("drilldown-tbody");
+    if (!overlay || !thead || !tbody) return;
 
     var parts = monthKey.split("-");
     var monthNum = parseInt(parts[1], 10);
     var label = monthNames[monthNum - 1] + " " + parts[0];
-    title.textContent = label + " \u2014 Labor & Revenue Detail";
+    if (title) title.textContent = label + " \u2014 Labor & Revenue Detail";
 
     var filteredRows = getFilteredRows();
     var agg = {};
@@ -724,8 +750,7 @@
       var tdAmount = document.createElement("td");
       tdAmount.className = "num";
       tdAmount.textContent = "$" + r.sum.toLocaleString("en-US", {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
+        minimumFractionDigits: 0, maximumFractionDigits: 0
       });
       tr.appendChild(tdAmount);
 
@@ -740,14 +765,11 @@
     overlay.classList.remove("hidden");
   }
 
-  // Close drill-down
-  document.getElementById("drilldown-close").addEventListener("click", function () {
-    document.getElementById("drilldown-overlay").classList.add("hidden");
-  });
+  // ─── Boot ─────────────────────────────────────────────────────────────
 
-  document.getElementById("drilldown-overlay").addEventListener("click", function (e) {
-    if (e.target === this) {
-      this.classList.add("hidden");
-    }
-  });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
 })();
