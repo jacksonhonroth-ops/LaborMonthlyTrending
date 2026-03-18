@@ -276,8 +276,12 @@
   }
 
   function aggregateData(rows) {
-    var actual = {};
-    var budget = {};
+    // Separate buckets by source type
+    var actual = {};   // ACTUAL rows only
+    var budget = {};   // Budget/forecast rows only
+
+    // Discover which budget source name exists in the data
+    var sourceCounts = {};
 
     for (var r = 0; r < rows.length; r++) {
       var row = rows[r];
@@ -297,6 +301,9 @@
       var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
       var monthKey = year + "-" + mm;
 
+      // Track source types for debugging
+      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+
       var target = isActual ? actual : budget;
       if (!target[monthKey]) {
         target[monthKey] = { labor: 0, revenue: 0 };
@@ -305,10 +312,13 @@
       if (laborCategories.indexOf(category) !== -1) {
         target[monthKey].labor += amount;
       } else if (category === revenueCategory) {
-        // Revenue is stored as negative (credit convention) — negate to positive
-        target[monthKey].revenue += amount * -1;
+        // ACTUAL revenue uses credit convention (stored negative) — negate to positive
+        // Budget/forecast revenue is already stored as positive — use as-is
+        target[monthKey].revenue += isActual ? (amount * -1) : amount;
       }
     }
+
+    console.log('[LaborMOM] Sources found:', JSON.stringify(sourceCounts));
 
     // Always show all 12 months for full FY trend
     var sortedKeys = [];
@@ -331,24 +341,25 @@
       var parts = key.split("-");
       var monthNum = parseInt(parts[1], 10);
 
-      var a = actual[key];
+      var a = actual[key] || { labor: 0, revenue: 0 };
       var b = budget[key] || { labor: 0, revenue: 0 };
 
-      var useActual = key < curMonthKey && a && (a.labor !== 0 || a.revenue !== 0);
-      var display = useActual ? a : b;
+      // Use actuals for closed months that have data, budget/forecast for all others
+      var useActual = key < curMonthKey && a.labor !== 0;
+      var displayLabor = useActual ? a.labor : b.labor;
+      var displayRev   = useActual ? a.revenue : b.revenue;
 
       var label = monthNames[monthNum - 1] + " " + parts[0];
       months.push(label);
       monthKeys.push(key);
       monthSources.push(useActual ? "ACT" : "FCST");
 
-      actualLabor.push(display.labor);
+      actualLabor.push(displayLabor);
       budgetLabor.push(b.labor);
 
-      var dispRev = display.revenue;
-      var bRev = b.revenue;
-      actualDL.push(dispRev !== 0 ? parseFloat(((display.labor / dispRev) * 100).toFixed(2)) : 0);
-      budgetDL.push(bRev !== 0 ? parseFloat(((b.labor / bRev) * 100).toFixed(2)) : 0);
+      // DL% = labor / revenue * 100
+      actualDL.push(displayRev !== 0 ? parseFloat(((displayLabor / displayRev) * 100).toFixed(2)) : 0);
+      budgetDL.push(b.revenue !== 0 ? parseFloat(((b.labor / b.revenue) * 100).toFixed(2)) : 0);
     });
 
     return {
