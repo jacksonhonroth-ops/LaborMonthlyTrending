@@ -17,12 +17,13 @@
   // Current year filter
   var currentYear = 2026;
 
-  // SQL query — filter to only needed P&L categories (big perf win)
-  // No GROUP BY — client-side aggregation stays identical to original domo.get logic
+  // SQL query — filter to only needed P&L categories
+  // Uses Metrics = P&L Category Name to prevent double-counting (summary + detail rows)
   var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `P&L Category Name` as `Category`, " +
     "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, `Amount` " +
     "FROM dataset " +
-    "WHERE `P&L Category Name` IN ('Total Labor', 'Service Revenue')";
+    "WHERE `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
+    "AND `Metrics` = `P&L Category Name`";
 
   var monthNames = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
