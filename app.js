@@ -10,20 +10,20 @@
   var laborCategories = ["Total Labor"];
   var revenueCategory = "Service Revenue";
 
-  // Source values
+  // Source values — match any of these for actuals vs budget/forecast
   var sourceActual = "ACTUAL";
-  var sourceBudget = "GL_FORECAST";
+  var BUDGET_SOURCES = ["GL_FORECAST", "OPS_FIN_BUDGET", "GL_BUDGET", "BUDGET", "FORECAST"];
 
   // Current year filter
   var currentYear = 2026;
 
-  // SQL query — pre-aggregate server-side, only fetch needed categories/sources
+  // SQL query — filter to only needed P&L categories, fetch ALL sources
+  // (don't filter SOURCE in SQL since budget source name varies by dataset)
   var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `P&L Category Name` as `Category`, " +
     "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
-    "WHERE `SOURCE` IN ('ACTUAL', 'GL_FORECAST') " +
-    "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
+    "WHERE `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
     "GROUP BY `MONTH`, `SOURCE`, `P&L Category Name`, `Region`, " +
     "`JobNumber`, `Parent Account`, `Operations Lead`";
 
@@ -271,18 +271,24 @@
 
   // ─── Aggregation ──────────────────────────────────────────────────────
 
+  function isBudgetSource(src) {
+    return BUDGET_SOURCES.indexOf(src) !== -1;
+  }
+
   function aggregateData(rows) {
     var actual = {};
-    var forecast = {};
+    var budget = {};
 
     for (var r = 0; r < rows.length; r++) {
       var row = rows[r];
       var monthRaw = row[colIndices.month];
       var amount = parseFloat(row[colIndices.amount]) || 0;
       var category = row[colIndices.category];
-      var source = row[colIndices.source];
+      var source = (row[colIndices.source] || "").toString().trim();
 
-      if (source !== sourceActual && source !== sourceBudget) continue;
+      var isActual = (source === sourceActual);
+      var isBudget = isBudgetSource(source);
+      if (!isActual && !isBudget) continue;
 
       var d = parseDate(monthRaw);
       var year = d.getUTCFullYear();
@@ -291,7 +297,7 @@
       var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
       var monthKey = year + "-" + mm;
 
-      var target = (source === sourceActual) ? actual : forecast;
+      var target = isActual ? actual : budget;
       if (!target[monthKey]) {
         target[monthKey] = { labor: 0, revenue: 0 };
       }
@@ -299,14 +305,16 @@
       if (laborCategories.indexOf(category) !== -1) {
         target[monthKey].labor += amount;
       } else if (category === revenueCategory) {
+        // Revenue is stored as negative (credit convention) — negate to positive
         target[monthKey].revenue += amount * -1;
       }
     }
 
-    var allKeys = {};
-    Object.keys(actual).forEach(function (k) { allKeys[k] = true; });
-    Object.keys(forecast).forEach(function (k) { allKeys[k] = true; });
-    var sortedKeys = Object.keys(allKeys).sort();
+    // Always show all 12 months for full FY trend
+    var sortedKeys = [];
+    for (var m = 1; m <= 12; m++) {
+      sortedKeys.push(currentYear + "-" + ("0" + m).slice(-2));
+    }
 
     var now = new Date();
     var curMonthKey = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
@@ -324,10 +332,10 @@
       var monthNum = parseInt(parts[1], 10);
 
       var a = actual[key];
-      var f = forecast[key] || { labor: 0, revenue: 0 };
+      var b = budget[key] || { labor: 0, revenue: 0 };
 
       var useActual = key < curMonthKey && a && (a.labor !== 0 || a.revenue !== 0);
-      var display = useActual ? a : f;
+      var display = useActual ? a : b;
 
       var label = monthNames[monthNum - 1] + " " + parts[0];
       months.push(label);
@@ -335,12 +343,12 @@
       monthSources.push(useActual ? "ACT" : "FCST");
 
       actualLabor.push(display.labor);
-      budgetLabor.push(f.labor);
+      budgetLabor.push(b.labor);
 
       var dispRev = display.revenue;
-      var fRev = f.revenue;
+      var bRev = b.revenue;
       actualDL.push(dispRev !== 0 ? parseFloat(((display.labor / dispRev) * 100).toFixed(2)) : 0);
-      budgetDL.push(fRev !== 0 ? parseFloat(((f.labor / fRev) * 100).toFixed(2)) : 0);
+      budgetDL.push(bRev !== 0 ? parseFloat(((b.labor / bRev) * 100).toFixed(2)) : 0);
     });
 
     return {
@@ -705,7 +713,7 @@
     for (var r = 0; r < filteredRows.length; r++) {
       var row = filteredRows[r];
       var source = row[colIndices.source];
-      if (source !== sourceActual && source !== sourceBudget) continue;
+      if (source !== sourceActual && !isBudgetSource(source)) continue;
 
       var category = row[colIndices.category];
       if (laborCategories.indexOf(category) === -1 && category !== revenueCategory) continue;
@@ -740,7 +748,7 @@
       var tr = document.createElement("tr");
 
       var tdSource = document.createElement("td");
-      tdSource.textContent = r.source === sourceBudget ? "Budget" : "Actual";
+      tdSource.textContent = isBudgetSource(r.source) ? "Budget" : "Actual";
       tr.appendChild(tdSource);
 
       var tdCat = document.createElement("td");
