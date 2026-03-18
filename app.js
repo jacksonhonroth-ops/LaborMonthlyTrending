@@ -1,29 +1,23 @@
 // Labor MOM Trending Card
 // Data source: Job_Financials_wo_JoinV2 (977fd639-75bb-422c-8773-a26488330bca)
-// Uses SQL aggregation to reduce data transfer — only fetches Total Labor + Service Revenue
+// Aggregates Amount by P&L Category Name to derive Labor $ and DL %
 // Compares ACTUAL vs GL_FORECAST, drill-down on click, filter by Region/Job/Account/OpsLead
 
 (function () {
   'use strict';
 
-  // P&L Category Name values
+  var datasets = ["dataset"];
+
+  // P&L Category Name values that constitute labor
   var laborCategories = ["Total Labor"];
   var revenueCategory = "Service Revenue";
 
-  // Source values — match any of these for actuals vs budget/forecast
+  // Source values
   var sourceActual = "ACTUAL";
-  var BUDGET_SOURCES = ["GL_FORECAST", "OPS_FIN_BUDGET", "GL_BUDGET", "BUDGET", "FORECAST"];
+  var sourceBudget = "GL_FORECAST";
 
   // Current year filter
   var currentYear = 2026;
-
-  // SQL query — filter to only needed P&L categories
-  // Uses Metrics = P&L Category Name to prevent double-counting (summary + detail rows)
-  var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `P&L Category Name` as `Category`, " +
-    "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, `Amount` " +
-    "FROM dataset " +
-    "WHERE `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
-    "AND `Metrics` = `P&L Category Name`";
 
   var monthNames = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -45,13 +39,13 @@
     return new Date(s);
   }
 
-  // All DOM refs — populated in boot()
+  // All DOM refs
   var loader, loaderText;
   var filterRegion, filterOps, filterJob, filterAccount, jobList, accountList;
   var btnChart, btnTable, chartContainer, tableContainer;
 
   // State
-  var rawRows = null;
+  var rawData = null;
   var colIndices = null;
   var chartInstance = null;
   var currentView = "chart";
@@ -72,7 +66,7 @@
 
     if (loaderText) loaderText.textContent = "Fetching from Job Financials...";
 
-    // Filter change listeners
+    // Filter listeners
     if (filterRegion) filterRegion.addEventListener("change", refreshView);
     if (filterOps) filterOps.addEventListener("change", refreshView);
 
@@ -109,7 +103,6 @@
         refreshView();
       });
     }
-
     if (btnTable) {
       btnTable.addEventListener("click", function () {
         if (currentView === "table") return;
@@ -130,7 +123,6 @@
         if (ov) ov.classList.add("hidden");
       });
     }
-
     var ddOverlay = document.getElementById("drilldown-overlay");
     if (ddOverlay) {
       ddOverlay.addEventListener("click", function (e) {
@@ -138,47 +130,55 @@
       });
     }
 
-    // Load data via SQL
     loadData();
   }
 
+  // ─── Data Loading — uses domo.get (original working approach) ─────────
+
   function loadData() {
-    if (typeof domo === 'undefined' || !domo.post) {
+    if (typeof domo === 'undefined') {
       showError('domo.js not loaded');
       return;
     }
-    domo.post('/sql/v1/dataset', SQL_QUERY, { contentType: 'text/plain' })
-      .then(function (resp) {
+    var query = "/data/v1/" + datasets[0];
+    domo.get(query, { format: "array-of-arrays" })
+      .then(function (data) {
         if (loaderText) loaderText.textContent = "Building chart...";
-        var cols = resp.columns;
-        rawRows = resp.rows;
+        rawData = data;
         colIndices = {
-          month: findCol(cols, ["MONTH", "Month", "month"]),
-          amount: findCol(cols, ["Amount", "amount", "AMOUNT"]),
-          category: findCol(cols, ["Category", "P&L Category Name", "PLCategoryName"]),
-          source: findCol(cols, ["SOURCE", "Source", "source"]),
-          region: findCol(cols, ["Region", "region", "REGION"]),
-          job: findCol(cols, ["JobNumber", "Job Number", "JOB_NUMBER"]),
-          account: findCol(cols, ["Parent Account", "ParentAccount", "PARENT_ACCOUNT"]),
-          opsLead: findCol(cols, ["Operations Lead", "OperationsLead", "OpsLead", "OPS_LEAD"])
+          month: findCol(data.columns, ["MONTH", "Month", "month"]),
+          amount: findCol(data.columns, ["Amount", "amount", "AMOUNT"]),
+          category: findCol(data.columns, ["PLCategoryName", "P&L Category Name", "P&L_Category_Name"]),
+          source: findCol(data.columns, ["SOURCE", "Source", "source"]),
+          region: findCol(data.columns, ["Region", "region", "REGION"]),
+          job: findCol(data.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
+          account: findCol(data.columns, ["ParentAccount", "Parent Account", "PARENT_ACCOUNT"]),
+          opsLead: findCol(data.columns, ["OperationsLead", "Operations Lead", "OpsLead", "OPS_LEAD"])
         };
+
+        // Log discovered sources for debugging
+        var srcSet = {};
+        for (var i = 0; i < data.rows.length; i++) {
+          var s = data.rows[i][colIndices.source];
+          if (s) srcSet[s] = (srcSet[s] || 0) + 1;
+        }
+        console.log('[LaborMOM] Sources found:', JSON.stringify(srcSet));
+        console.log('[LaborMOM] Columns:', JSON.stringify(data.columns));
+        console.log('[LaborMOM] Total rows:', data.rows.length);
+
         populateFilters();
         refreshView();
         if (loader) loader.classList.add("hidden");
       })
       .catch(function (err) {
         var msg = err && err.message ? err.message : JSON.stringify(err);
-        showError('SQL error: ' + msg);
+        showError('Load error: ' + msg);
       });
   }
 
   function showError(msg) {
-    if (loaderText) {
-      loaderText.textContent = msg;
-    } else {
-      var el = document.getElementById("loader-text");
-      if (el) el.textContent = msg;
-    }
+    var el = loaderText || document.getElementById("loader-text");
+    if (el) el.textContent = msg;
   }
 
   // ─── Filters ──────────────────────────────────────────────────────────
@@ -189,17 +189,16 @@
     var accounts = {};
     var leads = {};
 
-    for (var r = 0; r < rawRows.length; r++) {
-      var row = rawRows[r];
-      var rgn = colIndices.region >= 0 ? row[colIndices.region] : null;
+    rawData.rows.forEach(function (row) {
+      var r = colIndices.region >= 0 ? row[colIndices.region] : null;
       var j = colIndices.job >= 0 ? row[colIndices.job] : null;
       var a = colIndices.account >= 0 ? row[colIndices.account] : null;
       var o = colIndices.opsLead >= 0 ? row[colIndices.opsLead] : null;
-      if (rgn && rgn !== "HQ") regions[rgn] = true;
+      if (r && r !== "HQ") regions[r] = true;
       if (j) jobs[j] = true;
       if (a) accounts[a] = true;
       if (o) leads[o] = true;
-    }
+    });
 
     fillSelect(filterRegion, Object.keys(regions).sort());
     fillSelect(filterOps, Object.keys(leads).sort());
@@ -232,12 +231,12 @@
     var jVal = filterJob ? filterJob.value.trim() : "";
     var aVal = filterAccount ? filterAccount.value.trim() : "";
 
-    if (!rVal && !jVal && !aVal && !oVal) return rawRows;
+    if (!rVal && !jVal && !aVal && !oVal) return rawData.rows;
 
     var jLower = jVal.toLowerCase();
     var aLower = aVal.toLowerCase();
 
-    return rawRows.filter(function (row) {
+    return rawData.rows.filter(function (row) {
       if (colIndices.region >= 0 && row[colIndices.region] === "HQ") return false;
       if (rVal && colIndices.region >= 0 && row[colIndices.region] !== rVal) return false;
       if (oVal && colIndices.opsLead >= 0 && row[colIndices.opsLead] !== oVal) return false;
@@ -256,7 +255,7 @@
   // ─── Refresh ──────────────────────────────────────────────────────────
 
   function refreshView() {
-    if (!rawRows) return;
+    if (!rawData) return;
     var filteredRows = getFilteredRows();
     var processed = aggregateData(filteredRows);
 
@@ -267,42 +266,28 @@
     }
   }
 
-  // ─── Aggregation ──────────────────────────────────────────────────────
-
-  function isBudgetSource(src) {
-    return BUDGET_SOURCES.indexOf(src) !== -1;
-  }
+  // ─── Aggregation (original working logic) ─────────────────────────────
 
   function aggregateData(rows) {
-    // Separate buckets by source type
-    var actual = {};   // ACTUAL rows only
-    var budget = {};   // Budget/forecast rows only
+    var actual = {};
+    var forecast = {};
 
-    // Discover which budget source name exists in the data
-    var sourceCounts = {};
-
-    for (var r = 0; r < rows.length; r++) {
-      var row = rows[r];
+    rows.forEach(function (row) {
       var monthRaw = row[colIndices.month];
       var amount = parseFloat(row[colIndices.amount]) || 0;
       var category = row[colIndices.category];
-      var source = (row[colIndices.source] || "").toString().trim();
+      var source = row[colIndices.source];
 
-      var isActual = (source === sourceActual);
-      var isBudget = isBudgetSource(source);
-      if (!isActual && !isBudget) continue;
+      if (source !== sourceActual && source !== sourceBudget) return;
 
       var d = parseDate(monthRaw);
       var year = d.getUTCFullYear();
-      if (year !== currentYear) continue;
+      if (year !== currentYear) return;
 
       var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
       var monthKey = year + "-" + mm;
 
-      // Track source types for debugging
-      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
-
-      var target = isActual ? actual : budget;
+      var target = (source === sourceActual) ? actual : forecast;
       if (!target[monthKey]) {
         target[monthKey] = { labor: 0, revenue: 0 };
       }
@@ -310,13 +295,10 @@
       if (laborCategories.indexOf(category) !== -1) {
         target[monthKey].labor += amount;
       } else if (category === revenueCategory) {
-        // ACTUAL revenue uses credit convention (stored negative) — negate to positive
-        // Budget/forecast revenue is already stored as positive — use as-is
-        target[monthKey].revenue += isActual ? (amount * -1) : amount;
+        // Revenue is stored as negative (credit convention) — negate to positive
+        target[monthKey].revenue += amount * -1;
       }
-    }
-
-    console.log('[LaborMOM] Sources found:', JSON.stringify(sourceCounts));
+    });
 
     // Always show all 12 months for full FY trend
     var sortedKeys = [];
@@ -339,25 +321,25 @@
       var parts = key.split("-");
       var monthNum = parseInt(parts[1], 10);
 
-      var a = actual[key] || { labor: 0, revenue: 0 };
-      var b = budget[key] || { labor: 0, revenue: 0 };
+      var a = actual[key];
+      var f = forecast[key] || { labor: 0, revenue: 0 };
 
-      // Use actuals for closed months that have data, budget/forecast for all others
-      var useActual = key < curMonthKey && a.labor !== 0;
-      var displayLabor = useActual ? a.labor : b.labor;
-      var displayRev   = useActual ? a.revenue : b.revenue;
+      // Use actuals only for closed months (before the current month)
+      var useActual = key < curMonthKey && a && (a.labor !== 0 || a.revenue !== 0);
+      var display = useActual ? a : f;
 
       var label = monthNames[monthNum - 1] + " " + parts[0];
       months.push(label);
       monthKeys.push(key);
       monthSources.push(useActual ? "ACT" : "FCST");
 
-      actualLabor.push(displayLabor);
-      budgetLabor.push(b.labor);
+      actualLabor.push(display.labor);
+      budgetLabor.push(f.labor);
 
-      // DL% = labor / revenue * 100
-      actualDL.push(displayRev !== 0 ? parseFloat(((displayLabor / displayRev) * 100).toFixed(2)) : 0);
-      budgetDL.push(b.revenue !== 0 ? parseFloat(((b.labor / b.revenue) * 100).toFixed(2)) : 0);
+      var dispRev = display.revenue;
+      var fRev = f.revenue;
+      actualDL.push(dispRev !== 0 ? parseFloat(((display.labor / dispRev) * 100).toFixed(2)) : 0);
+      budgetDL.push(fRev !== 0 ? parseFloat(((f.labor / fRev) * 100).toFixed(2)) : 0);
     });
 
     return {
@@ -393,6 +375,7 @@
       return m + "\n(" + monthSources[i] + ")";
     });
 
+    // MOM changes
     var momLaborChange = [];
     var momDLChange = [];
     for (var i = 0; i < actualLabor.length; i++) {
@@ -481,10 +464,7 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: {
-          mode: "index",
-          intersect: false
-        },
+        interaction: { mode: "index", intersect: false },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -719,28 +699,27 @@
     var filteredRows = getFilteredRows();
     var agg = {};
 
-    for (var r = 0; r < filteredRows.length; r++) {
-      var row = filteredRows[r];
+    filteredRows.forEach(function (row) {
       var source = row[colIndices.source];
-      if (source !== sourceActual && !isBudgetSource(source)) continue;
+      if (source !== sourceActual && source !== sourceBudget) return;
 
       var category = row[colIndices.category];
-      if (laborCategories.indexOf(category) === -1 && category !== revenueCategory) continue;
+      if (laborCategories.indexOf(category) === -1 && category !== revenueCategory) return;
 
       var d = parseDate(row[colIndices.month]);
       var year = d.getUTCFullYear();
-      if (year !== currentYear) continue;
+      if (year !== currentYear) return;
 
       var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
       var key = year + "-" + mm;
-      if (key !== monthKey) continue;
+      if (key !== monthKey) return;
 
       var amount = parseFloat(row[colIndices.amount]) || 0;
       var aggKey = source + "|" + category;
       if (!agg[aggKey]) agg[aggKey] = { source: source, category: category, sum: 0, count: 0 };
       agg[aggKey].sum += amount;
       agg[aggKey].count += 1;
-    }
+    });
 
     var aggRows = Object.keys(agg).sort().map(function (k) { return agg[k]; });
 
@@ -757,7 +736,7 @@
       var tr = document.createElement("tr");
 
       var tdSource = document.createElement("td");
-      tdSource.textContent = isBudgetSource(r.source) ? "Budget" : "Actual";
+      tdSource.textContent = r.source === sourceBudget ? "Budget" : "Actual";
       tr.appendChild(tdSource);
 
       var tdCat = document.createElement("td");
