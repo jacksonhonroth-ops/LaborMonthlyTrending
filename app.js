@@ -1,7 +1,7 @@
 // Labor MOM Trending Card
 // Data source: Job_Financials_wo_JoinV2 (977fd639-75bb-422c-8773-a26488330bca)
 // Uses SQL aggregation to reduce data transfer — only fetches Total Labor + Service Revenue
-// Compares ACTUAL vs GL_FORECAST, drill-down on click, filter by Region/Job/Account/OpsLead
+// Compares ACTUAL vs OPS_FIN_BUDGET, drill-down on click, filter by Region/Job/Account/OpsLead
 
 (function () {
   'use strict';
@@ -12,7 +12,7 @@
 
   // Source values
   var sourceActual = "ACTUAL";
-  var sourceBudget = "GL_FORECAST";
+  var sourceBudget = "OPS_FIN_BUDGET";
 
   // Current year filter
   var currentYear = 2026;
@@ -22,7 +22,7 @@
     "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
-    "WHERE `SOURCE` IN ('ACTUAL', 'GL_FORECAST') " +
+    "WHERE `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET') " +
     "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
     "GROUP BY `MONTH`, `SOURCE`, `P&L Category Name`, `Region`, " +
     "`JobNumber`, `Parent Account`, `Operations Lead`";
