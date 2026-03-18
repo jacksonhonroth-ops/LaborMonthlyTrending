@@ -18,13 +18,13 @@
   var currentYear = 2026;
 
   // SQL query — pre-aggregate server-side, only fetch needed categories/sources
-  var SQL_QUERY = "SELECT `GLPostingDate`, `SOURCE`, `P&L Category Name` as `Category`, " +
+  var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `P&L Category Name` as `Category`, " +
     "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
     "WHERE `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET') " +
     "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
-    "GROUP BY `GLPostingDate`, `SOURCE`, `P&L Category Name`, `Region`, " +
+    "GROUP BY `MONTH`, `SOURCE`, `P&L Category Name`, `Region`, " +
     "`JobNumber`, `Parent Account`, `Operations Lead`";
 
   var monthNames = [
@@ -66,14 +66,14 @@
       var cols = resp.columns;
       rawRows = resp.rows;
       colIndices = {
-        month: findCol(cols, ["GLPostingDate", "MONTH", "Month", "month"]),
+        month: findCol(cols, ["MONTH", "Month", "month"]),
         amount: findCol(cols, ["Amount", "amount", "AMOUNT"]),
-        category: findCol(cols, ["Category", "P&L Category Name", "P&L Category"]),
+        category: findCol(cols, ["Category", "P&L Category Name", "PLCategoryName"]),
         source: findCol(cols, ["SOURCE", "Source", "source"]),
         region: findCol(cols, ["Region", "region", "REGION"]),
         job: findCol(cols, ["JobNumber", "Job Number", "JOB_NUMBER"]),
         account: findCol(cols, ["Parent Account", "ParentAccount", "PARENT_ACCOUNT"]),
-        opsLead: findCol(cols, ["Operations Lead", "Ops Lead", "OpsLead", "OPS_LEAD"])
+        opsLead: findCol(cols, ["Operations Lead", "OperationsLead", "OpsLead", "OPS_LEAD"])
       };
       populateFilters();
       refreshView();

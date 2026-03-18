@@ -7,14 +7,14 @@
          "dataSetId": "977fd639-75bb-422c-8773-a26488330bca",
          "alias": "dataset",
          "fields": [
-            { "alias": "GLPostingDate", "columnName": "GLPostingDate" },
+            { "alias": "MONTH", "columnName": "MONTH" },
             { "alias": "Amount", "columnName": "Amount" },
             { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
             { "alias": "SOURCE", "columnName": "SOURCE" },
             { "alias": "Region", "columnName": "Region" },
             { "alias": "JobNumber", "columnName": "JobNumber" },
             { "alias": "ParentAccount", "columnName": "Parent Account" },
-            { "alias": "OpsLead", "columnName": "Operations Lead" }
+            { "alias": "OperationsLead", "columnName": "Operations Lead" }
          ]
       }
    ],
