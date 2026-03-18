@@ -17,15 +17,12 @@
   // Current year filter
   var currentYear = 2026;
 
-  // SQL query — filter to only needed P&L categories, fetch ALL sources
-  // (don't filter SOURCE in SQL since budget source name varies by dataset)
+  // SQL query — filter to only needed P&L categories (big perf win)
+  // No GROUP BY — client-side aggregation stays identical to original domo.get logic
   var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `P&L Category Name` as `Category`, " +
-    "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
-    "SUM(`Amount`) as `Amount` " +
+    "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, `Amount` " +
     "FROM dataset " +
-    "WHERE `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
-    "GROUP BY `MONTH`, `SOURCE`, `P&L Category Name`, `Region`, " +
-    "`JobNumber`, `Parent Account`, `Operations Lead`";
+    "WHERE `P&L Category Name` IN ('Total Labor', 'Service Revenue')";
 
   var monthNames = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
