@@ -14,7 +14,7 @@
 
   // Source values
   var sourceActual = "ACTUAL";
-  var sourceBudget = "GL_FORECAST";
+  var sourceBudget = "OPS_FIN_BUDGET";
 
   // Current year filter
   var currentYear = 2026;
@@ -135,14 +135,15 @@
 
   // ─── Data Loading — SQL pre-filtered to only needed categories/sources ──
 
-  var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `P&L Category Name` as `Category`, " +
-    "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
+  // SQL uses manifest ALIAS names (not raw column names) when referencing via FROM dataset
+  var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `PLCategoryName`, " +
+    "`Region`, `JobNumber`, `ParentAccount`, `OperationsLead`, " +
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
-    "WHERE `SOURCE` IN ('ACTUAL', 'GL_FORECAST') " +
-    "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
-    "GROUP BY `MONTH`, `SOURCE`, `P&L Category Name`, `Region`, " +
-    "`JobNumber`, `Parent Account`, `Operations Lead`";
+    "WHERE `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET') " +
+    "AND `PLCategoryName` IN ('Total Labor', 'Service Revenue') " +
+    "GROUP BY `MONTH`, `SOURCE`, `PLCategoryName`, `Region`, " +
+    "`JobNumber`, `ParentAccount`, `OperationsLead`";
 
   function loadData() {
     if (typeof domo === 'undefined') {
@@ -157,14 +158,14 @@
           rows: resp.rows
         };
         colIndices = {
-          month: findCol(resp.columns, ["MONTH", "Month", "month"]),
-          amount: findCol(resp.columns, ["Amount", "amount", "AMOUNT"]),
-          category: findCol(resp.columns, ["Category", "P&L Category Name", "PLCategoryName"]),
-          source: findCol(resp.columns, ["SOURCE", "Source", "source"]),
-          region: findCol(resp.columns, ["Region", "region", "REGION"]),
-          job: findCol(resp.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
-          account: findCol(resp.columns, ["Parent Account", "ParentAccount", "PARENT_ACCOUNT"]),
-          opsLead: findCol(resp.columns, ["Operations Lead", "OperationsLead", "OpsLead", "OPS_LEAD"])
+          month: findCol(resp.columns, ["MONTH", "Month"]),
+          amount: findCol(resp.columns, ["Amount", "AMOUNT"]),
+          category: findCol(resp.columns, ["PLCategoryName", "P&L Category Name", "Category"]),
+          source: findCol(resp.columns, ["SOURCE", "Source"]),
+          region: findCol(resp.columns, ["Region", "REGION"]),
+          job: findCol(resp.columns, ["JobNumber", "Job Number"]),
+          account: findCol(resp.columns, ["ParentAccount", "Parent Account"]),
+          opsLead: findCol(resp.columns, ["OperationsLead", "Operations Lead"])
         };
 
         console.log('[LaborMOM] Columns:', JSON.stringify(resp.columns));
