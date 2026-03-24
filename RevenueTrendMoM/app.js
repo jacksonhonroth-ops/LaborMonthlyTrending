@@ -76,13 +76,12 @@
     return fmtCurrency(value);
   }
 
-  // Normalize revenue: actuals are stored negative, budget/forecast may vary
-  // Always return positive revenue
-  function normalizeRevenue(amount, source) {
+  // Normalize revenue: GL stores revenue as negative (credits).
+  // All sources (actual, budget, forecast) follow this convention,
+  // so always use Math.abs to get positive revenue values.
+  function normalizeRevenue(amount) {
     var val = parseFloat(amount) || 0;
-    if (source === sourceActual) return Math.abs(val);
-    // Budget & forecast: if negative, flip to positive
-    return val < 0 ? Math.abs(val) : val;
+    return Math.abs(val);
   }
 
   // ─── State ──────────────────────────────────────────────────────────
@@ -282,7 +281,7 @@
       var source = row[col.source];
       var d = parseDate(row[col.date]);
       var mk = monthKey(d);
-      var amount = normalizeRevenue(row[col.amount], source);
+      var amount = normalizeRevenue(row[col.amount]);
 
       if (source === sourceActual) {
         actual[mk] = (actual[mk] || 0) + amount;
@@ -578,7 +577,7 @@
       var source = row[col.source];
       var d = parseDate(row[col.date]);
       var mk = monthKey(d);
-      var amount = normalizeRevenue(row[col.amount], source);
+      var amount = normalizeRevenue(row[col.amount]);
 
       if (!tree[region]) tree[region] = {};
       if (!tree[region][account]) tree[region][account] = {};
@@ -783,7 +782,7 @@
       if (monthKey(d) !== mk) continue;
 
       var account = (col.account >= 0 ? row[col.account] : 'Unknown') || 'Unknown';
-      var amount = normalizeRevenue(row[col.amount], source);
+      var amount = normalizeRevenue(row[col.amount]);
 
       if (!agg[account]) agg[account] = { actual: 0, budget: 0, forecast: 0 };
       if (source === sourceActual) agg[account].actual += amount;
