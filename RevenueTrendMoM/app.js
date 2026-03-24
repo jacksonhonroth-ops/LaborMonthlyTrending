@@ -20,17 +20,21 @@
   var yearSuffix = ' ' + String(currentYear).slice(-2);
 
   // SQL query — pre-aggregate at dataset level
+  // NOTE: most_recent_closing_period is fetched via MAX() so it does NOT
+  // appear in the GROUP BY.  Including it in GROUP BY would split otherwise-
+  // identical budget rows whenever the closing period value changes, causing
+  // double-counting when JS later sums by month.
   var SQL_QUERY = "SELECT `GLPostingDate`, `SOURCE`, " +
     "`Region`, `Parent Account`, `JobNumber`, `JobDescription`, " +
-    "`Operations Lead`, `Client`, `most_recent_closing_period`, " +
+    "`Operations Lead`, `Client`, " +
+    "MAX(`most_recent_closing_period`) as `most_recent_closing_period`, " +
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
     "WHERE `KeepActiveData` = 1 " +
     "AND `P&L Category Name` = 'Service Revenue' " +
     "AND YEAR(`GLPostingDate`) = " + currentYear + " " +
     "GROUP BY `GLPostingDate`, `SOURCE`, `Region`, `Parent Account`, " +
-    "`JobNumber`, `JobDescription`, `Operations Lead`, `Client`, " +
-    "`most_recent_closing_period`";
+    "`JobNumber`, `JobDescription`, `Operations Lead`, `Client`";
 
   // ─── Utilities ──────────────────────────────────────────────────────
 
@@ -76,12 +80,12 @@
     return fmtCurrency(value);
   }
 
-  // Normalize revenue: GL stores revenue as negative (credits).
-  // All sources (actual, budget, forecast) follow this convention,
-  // so always use Math.abs to get positive revenue values.
-  function normalizeRevenue(amount) {
+  // Normalize revenue: actuals are stored as negative (GL credits),
+  // budget and forecast are stored as positive values.
+  function normalizeRevenue(amount, source) {
     var val = parseFloat(amount) || 0;
-    return Math.abs(val);
+    if (source === sourceActual) return Math.abs(val);
+    return val;
   }
 
   // ─── State ──────────────────────────────────────────────────────────
@@ -281,7 +285,7 @@
       var source = row[col.source];
       var d = parseDate(row[col.date]);
       var mk = monthKey(d);
-      var amount = normalizeRevenue(row[col.amount]);
+      var amount = normalizeRevenue(row[col.amount], source);
 
       if (source === sourceActual) {
         actual[mk] = (actual[mk] || 0) + amount;
@@ -577,7 +581,7 @@
       var source = row[col.source];
       var d = parseDate(row[col.date]);
       var mk = monthKey(d);
-      var amount = normalizeRevenue(row[col.amount]);
+      var amount = normalizeRevenue(row[col.amount], source);
 
       if (!tree[region]) tree[region] = {};
       if (!tree[region][account]) tree[region][account] = {};
@@ -782,7 +786,7 @@
       if (monthKey(d) !== mk) continue;
 
       var account = (col.account >= 0 ? row[col.account] : 'Unknown') || 'Unknown';
-      var amount = normalizeRevenue(row[col.amount]);
+      var amount = normalizeRevenue(row[col.amount], source);
 
       if (!agg[account]) agg[account] = { actual: 0, budget: 0, forecast: 0 };
       if (source === sourceActual) agg[account].actual += amount;
