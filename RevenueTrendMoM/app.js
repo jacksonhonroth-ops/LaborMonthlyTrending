@@ -115,7 +115,7 @@
         jobDesc: findCol(cols, ['JobDescription', 'jobdescription']),
         opsLead: findCol(cols, ['Operations Lead', 'OperationsLead', 'OpsLead']),
         client: findCol(cols, ['Client', 'client']),
-        closingPeriod: findCol(cols, ['most_recent_closing_period'])
+        closingPeriod: findCol(cols, ['most_recent_closing_period', 'mostRecentClosingPeriod'])
       };
 
       // Determine closing period from the first row that has it

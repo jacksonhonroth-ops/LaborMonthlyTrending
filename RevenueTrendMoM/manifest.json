@@ -17,7 +17,7 @@
             { "alias": "OperationsLead", "columnName": "Operations Lead" },
             { "alias": "Client", "columnName": "Client" },
             { "alias": "KeepActiveData", "columnName": "KeepActiveData" },
-            { "alias": "most_recent_closing_period", "columnName": "most_recent_closing_period" }
+            { "alias": "mostRecentClosingPeriod", "columnName": "most_recent_closing_period" }
          ]
       }
    ],
