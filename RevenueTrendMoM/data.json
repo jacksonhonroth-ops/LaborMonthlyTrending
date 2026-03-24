@@ -1,0 +1,33 @@
+{
+   "datasource": "977fd639-75bb-422c-8773-a26488330bca",
+   "columns": [
+      "GLPostingDate",
+      "SOURCE",
+      "PLCategoryName",
+      "Amount",
+      "Region",
+      "ParentAccount",
+      "JobNumber",
+      "JobDescription",
+      "OperationsLead",
+      "Client",
+      "KeepActiveData",
+      "most_recent_closing_period"
+   ],
+   "metadata": [
+      { "type": "DATE", "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca", "maxLength": -1, "minLength": -1, "aggregated": false, "analytic": false },
+      { "type": "STRING", "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca", "maxLength": -1, "minLength": -1, "aggregated": false, "analytic": false },
+      { "type": "STRING", "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca", "maxLength": -1, "minLength": -1, "aggregated": false, "analytic": false },
+      { "type": "DOUBLE", "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca", "maxLength": -1, "minLength": -1, "aggregated": false, "analytic": false },
+      { "type": "STRING", "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca", "maxLength": -1, "minLength": -1, "aggregated": false, "analytic": false },
+      { "type": "STRING", "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca", "maxLength": -1, "minLength": -1, "aggregated": false, "analytic": false },
+      { "type": "STRING", "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca", "maxLength": -1, "minLength": -1, "aggregated": false, "analytic": false },
+      { "type": "STRING", "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca", "maxLength": -1, "minLength": -1, "aggregated": false, "analytic": false },
+      { "type": "STRING", "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca", "maxLength": -1, "minLength": -1, "aggregated": false, "analytic": false },
+      { "type": "STRING", "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca", "maxLength": -1, "minLength": -1, "aggregated": false, "analytic": false },
+      { "type": "LONG", "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca", "maxLength": -1, "minLength": -1, "aggregated": false, "analytic": false },
+      { "type": "DATE", "dataSourceId": "977fd639-75bb-422c-8773-a26488330bca", "maxLength": -1, "minLength": -1, "aggregated": false, "analytic": false }
+   ],
+   "fromcache": "false",
+   "numColumns": 12
+}
