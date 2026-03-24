@@ -6,21 +6,60 @@
          "dataSetId": "977fd639-75bb-422c-8773-a26488330bca",
          "alias": "dataset",
          "fields": [
-            { "alias": "GLPostingDate", "columnName": "GLPostingDate" },
-            { "alias": "SOURCE", "columnName": "SOURCE" },
-            { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
-            { "alias": "Amount", "columnName": "Amount" },
-            { "alias": "Region", "columnName": "Region" },
-            { "alias": "ParentAccount", "columnName": "Parent Account" },
-            { "alias": "JobNumber", "columnName": "JobNumber" },
-            { "alias": "JobDescription", "columnName": "JobDescription" },
-            { "alias": "OperationsLead", "columnName": "Operations Lead" },
-            { "alias": "Client", "columnName": "Client" },
-            { "alias": "KeepActiveData", "columnName": "KeepActiveData" },
-            { "alias": "mostRecentClosingPeriod", "columnName": "most_recent_closing_period" }
+            {
+               "alias": "GLPostingDate",
+               "columnName": "GLPostingDate"
+            },
+            {
+               "alias": "SOURCE",
+               "columnName": "SOURCE"
+            },
+            {
+               "alias": "PLCategoryName",
+               "columnName": "P&L Category Name"
+            },
+            {
+               "alias": "Amount",
+               "columnName": "Amount"
+            },
+            {
+               "alias": "Region",
+               "columnName": "Region"
+            },
+            {
+               "alias": "ParentAccount",
+               "columnName": "Parent Account"
+            },
+            {
+               "alias": "JobNumber",
+               "columnName": "JobNumber"
+            },
+            {
+               "alias": "JobDescription",
+               "columnName": "JobDescription"
+            },
+            {
+               "alias": "OperationsLead",
+               "columnName": "Operations Lead"
+            },
+            {
+               "alias": "Client",
+               "columnName": "Client"
+            },
+            {
+               "alias": "KeepActiveData",
+               "columnName": "KeepActiveData"
+            },
+            {
+               "alias": "mostRecentClosingPeriod",
+               "columnName": "most_recent_closing_period"
+            }
          ]
       }
    ],
-   "size": { "width": 6, "height": 4 },
+   "size": {
+      "width": 6,
+      "height": 4
+   },
    "fullpage": true
 }
