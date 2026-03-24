@@ -517,10 +517,12 @@
     var thead = document.getElementById('pl-thead');
     var tbody = document.getElementById('pl-tbody');
 
-    /* Build column layout: Actuals+Fcst, Budget, Variance per quarter + FY */
+    /* Build column layout: Actuals+Fcst or Forecast, Budget, Variance per quarter + FY */
     var colDefs = [];
     QUARTERS.forEach(function (q) {
-      colDefs.push({ group: q.label, type: 'blend', label: 'Actuals + Fcst' });
+      var st = quarterStatus[q.label];
+      var blendLabel = (st === 'closed' || st === 'partial') ? 'Actuals + Fcst' : 'Forecast';
+      colDefs.push({ group: q.label, type: 'blend', label: blendLabel });
       colDefs.push({ group: q.label, type: 'bud',   label: 'Budget' });
       colDefs.push({ group: q.label, type: 'var',   label: 'Variance' });
     });
