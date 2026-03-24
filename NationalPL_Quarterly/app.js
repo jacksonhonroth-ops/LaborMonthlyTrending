@@ -69,7 +69,7 @@
     if (val == null || isNaN(val)) return '';
     var neg = val < 0;
     var abs = Math.abs(val);
-    var str = '$' + Math.round(abs).toLocaleString('en-US');
+    var str = '$' + (abs / 1000000).toFixed(1) + 'M';
     return neg ? '(' + str + ')' : str;
   }
 
@@ -408,6 +408,23 @@
     var qBudRaw  = rollUpSource(budData);
     var qFcstRaw = rollUpSource(fcstData);
 
+    /* Blended per quarter: actuals for closed months, forecast for open */
+    var qBlend = {};
+    for (var blendCat in allCats) {
+      qBlend[blendCat] = {};
+      QUARTERS.forEach(function (q) {
+        var sum = 0;
+        q.months.forEach(function (mk) {
+          if (monthType[mk] === 'ACT') {
+            sum += (actData[blendCat] && actData[blendCat][mk]) || 0;
+          } else {
+            sum += (fcstData[blendCat] && fcstData[blendCat][mk]) || 0;
+          }
+        });
+        qBlend[blendCat][q.label] = sum;
+      });
+    }
+
     /* Compute derived rows per quarter for each source */
     function computeQuarterRows(qCatData, labels) {
       var qComp = {};
@@ -427,6 +444,7 @@
     var actQTDComp = computeQuarterRows(qActQTD, qLabels);
     var budComp    = computeQuarterRows(qBudRaw, qLabels.concat(['FY']));
     var fcstComp   = computeQuarterRows(qFcstRaw, qLabels.concat(['FY']));
+    var blendComp  = computeQuarterRows(qBlend, qLabels);
 
     /* FY Total: closed-quarter actuals + forecast for open */
     var fyTotalCats = {};
@@ -453,6 +471,8 @@
     return {
       qActQTD: qActQTD,
       actQTDComp: actQTDComp,
+      qBlend: qBlend,
+      blendComp: blendComp,
       qBud: qBudRaw,
       budComp: budComp,
       qFcst: qFcstRaw,
@@ -481,6 +501,8 @@
   function renderTable(result) {
     var qActQTD     = result.qActQTD;
     var actQTDComp  = result.actQTDComp;
+    var qBlend      = result.qBlend;
+    var blendComp   = result.blendComp;
     var qBud        = result.qBud;
     var budComp     = result.budComp;
     var qFcst       = result.qFcst;
@@ -495,17 +517,12 @@
     var thead = document.getElementById('pl-thead');
     var tbody = document.getElementById('pl-tbody');
 
-    /* Build column layout dynamically */
+    /* Build column layout: Actuals+Fcst, Budget, Variance per quarter + FY */
     var colDefs = [];
     QUARTERS.forEach(function (q) {
-      var st = quarterStatus[q.label];
-      if (st === 'closed') {
-        colDefs.push({ group: q.label, type: 'act', label: 'Actuals' });
-      } else if (st === 'partial') {
-        colDefs.push({ group: q.label, type: 'act', label: 'Actuals QTD' });
-      }
-      colDefs.push({ group: q.label, type: 'bud', label: 'Budget' });
-      colDefs.push({ group: q.label, type: 'fcst', label: 'Forecast' });
+      colDefs.push({ group: q.label, type: 'blend', label: 'Actuals + Fcst' });
+      colDefs.push({ group: q.label, type: 'bud',   label: 'Budget' });
+      colDefs.push({ group: q.label, type: 'var',   label: 'Variance' });
     });
     colDefs.push({ group: 'FY', type: 'total', label: 'Total' });
     colDefs.push({ group: 'FY', type: 'bud',   label: 'Budget' });
@@ -551,8 +568,7 @@
         th.className = 'fy-total';
       } else {
         th.textContent = grp;
-        var st = quarterStatus[grp];
-        th.className = 'quarter-group' + (st === 'closed' ? ' act' : st === 'partial' ? ' partial' : ' fcst');
+        th.className = 'quarter-group';
       }
       tr1.appendChild(th);
     });
@@ -565,6 +581,7 @@
       var th = document.createElement('th');
       th.textContent = cd.label;
       th.className = 'sub-' + cd.type + (cd.group === 'FY' ? ' fy-sub' : '');
+      if (cd.type === 'blend') th.className = 'sub-blend' + (cd.group === 'FY' ? ' fy-sub' : '');
       tr2.appendChild(th);
     });
     thead.appendChild(tr2);
@@ -585,15 +602,17 @@
         }
       }
 
-      if (cd.type === 'act') {
-        if (isComputed) return (actQTDComp[key] && actQTDComp[key][cd.group]) || 0;
-        return (qActQTD[key] && qActQTD[key][cd.group]) || 0;
+      if (cd.type === 'blend') {
+        if (isComputed) return (blendComp[key] && blendComp[key][cd.group]) || 0;
+        return (qBlend[key] && qBlend[key][cd.group]) || 0;
       } else if (cd.type === 'bud') {
         if (isComputed) return (budComp[key] && budComp[key][cd.group]) || 0;
         return (qBud[key] && qBud[key][cd.group]) || 0;
-      } else if (cd.type === 'fcst') {
-        if (isComputed) return (fcstComp[key] && fcstComp[key][cd.group]) || 0;
-        return (qFcst[key] && qFcst[key][cd.group]) || 0;
+      } else if (cd.type === 'var') {
+        /* Per-quarter variance: blend - budget */
+        var blendVal = isComputed ? ((blendComp[key] && blendComp[key][cd.group]) || 0) : ((qBlend[key] && qBlend[key][cd.group]) || 0);
+        var budQVal  = isComputed ? ((budComp[key] && budComp[key][cd.group]) || 0) : ((qBud[key] && qBud[key][cd.group]) || 0);
+        return blendVal - budQVal;
       }
       return 0;
     }

@@ -277,27 +277,12 @@ body {
 
 #pl-table thead tr.header-months th.quarter-group {
   background: #4a5568;
-  border-right: 2px solid #2d3748;
-}
-
-#pl-table thead tr.header-months th.quarter-group.act {
-  background: #1b7a3d;
-  border-right: 2px solid #145c2e;
-}
-
-#pl-table thead tr.header-months th.quarter-group.partial {
-  background: linear-gradient(135deg, #1b7a3d 50%, #2563a8 50%);
-  border-right: 2px solid #1d4e8a;
-}
-
-#pl-table thead tr.header-months th.quarter-group.fcst {
-  background: #2563a8;
-  border-right: 2px solid #1d4e8a;
+  border-right: 3px solid #1a1a2e;
 }
 
 #pl-table thead tr.header-months th.fy-total {
   background: #3a3f51;
-  border-left: 3px solid #1a1a2e;
+  border-left: 4px solid #1a1a2e;
 }
 
 /* Sub-header row: ACT / FCST labels */
@@ -339,6 +324,11 @@ body {
 }
 
 #pl-table thead tr.header-type th.sub-fcst {
+  background: #2563a8;
+  color: #fff;
+}
+
+#pl-table thead tr.header-type th.sub-blend {
   background: #2563a8;
   color: #fff;
 }
@@ -457,9 +447,18 @@ td.var-cell {
   color: #1b7a3d;
 }
 
-/* Quarter group separator */
-#pl-table tbody td:nth-child(4n+1) {
-  border-right: 2px solid #ddd;
+/* Quarter group separator — thick right border after each quarter's last col (var) */
+/* label=1, then groups of 3: Q1 ends at col 4, Q2 at 7, Q3 at 10, Q4 at 13 */
+#pl-table tbody td:nth-child(4),
+#pl-table tbody td:nth-child(7),
+#pl-table tbody td:nth-child(10),
+#pl-table tbody td:nth-child(13) {
+  border-right: 3px solid #999;
+}
+
+/* Also thicken the header sub-row quarter boundaries */
+#pl-table thead tr.header-type th:nth-child(3n) {
+  border-right: 3px solid rgba(0,0,0,0.3);
 }
 
 /* ── Responsive ── */
