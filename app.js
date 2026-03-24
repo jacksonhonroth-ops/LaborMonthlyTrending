@@ -544,7 +544,20 @@
         },
         scales: {
           x: {
-            grid: { display: false },
+            grid: {
+              display: true,
+              color: function (context) {
+                // Thick dark line between quarters (after index 2, 5, 8)
+                var idx = context.index;
+                if (idx === 3 || idx === 6 || idx === 9) return "rgba(0,0,0,0.3)";
+                return "rgba(0,0,0,0)";
+              },
+              lineWidth: function (context) {
+                var idx = context.index;
+                if (idx === 3 || idx === 6 || idx === 9) return 2;
+                return 0;
+              }
+            },
             ticks: { font: { size: 11 }, color: "#888" }
           },
           yDollars: {
