@@ -426,7 +426,7 @@
         labels: xLabels,
         datasets: [
           {
-            label: "Actuals + Fcst",
+            label: "Actual Labor $",
             type: "bar",
             data: actualLabor,
             backgroundColor: barColors,
@@ -449,17 +449,17 @@
             order: 3
           },
           {
-            label: "DL % Actuals + Fcst",
+            label: "DL % Actual",
             type: "line",
             data: actualDL,
             borderColor: "#e8833a",
             backgroundColor: "rgba(232, 131, 58, 0.1)",
-            borderWidth: 4,
+            borderWidth: 2.5,
             pointBackgroundColor: "#e8833a",
             pointBorderColor: "#fff",
-            pointBorderWidth: 2,
-            pointRadius: 5,
-            pointHoverRadius: 7,
+            pointBorderWidth: 1.5,
+            pointRadius: 4,
+            pointHoverRadius: 6,
             tension: 0.3,
             fill: false,
             yAxisID: "yPercent",
@@ -471,12 +471,12 @@
             data: budgetDL,
             borderColor: "#e8833a",
             borderDash: [6, 4],
-            borderWidth: 3,
+            borderWidth: 1.5,
             pointBackgroundColor: "#fff",
             pointBorderColor: "#e8833a",
-            pointBorderWidth: 2,
-            pointRadius: 4,
-            pointHoverRadius: 6,
+            pointBorderWidth: 1.5,
+            pointRadius: 3,
+            pointHoverRadius: 5,
             tension: 0.3,
             fill: false,
             yAxisID: "yPercent",
@@ -502,27 +502,32 @@
                 var value = context.parsed.y;
                 var idx = context.dataIndex;
 
-                if (label === "Actuals + Fcst" || label === "Budget Labor $") {
-                  var formatted = "$" + (Math.abs(value) / 1000000).toFixed(1) + "M";
-                  if (value < 0) formatted = "-" + formatted;
-                  if (label === "Actuals + Fcst") {
+                if (label.indexOf("Labor $") !== -1) {
+                  var formatted = "$" + value.toLocaleString("en-US", {
+                    minimumFractionDigits: 0, maximumFractionDigits: 0
+                  });
+                  if (label === "Actual Labor $") {
                     var mom = momLaborChange[idx];
                     if (mom !== null) {
                       var sign = mom >= 0 ? "+" : "";
-                      formatted += "  (" + sign + "$" + (Math.abs(mom) / 1000000).toFixed(1) + "M MOM)";
+                      formatted += "  (" + sign + "$" + mom.toLocaleString("en-US", {
+                        minimumFractionDigits: 0, maximumFractionDigits: 0
+                      }) + " MOM)";
                     }
                   }
                   if (label === "Budget Labor $") {
                     var variance = actualLabor[idx] - budgetLabor[idx];
                     var sign2 = variance >= 0 ? "+" : "";
-                    formatted += "  (var: " + sign2 + "$" + (Math.abs(variance) / 1000000).toFixed(1) + "M)";
+                    formatted += "  (var: " + sign2 + "$" + variance.toLocaleString("en-US", {
+                      minimumFractionDigits: 0, maximumFractionDigits: 0
+                    }) + ")";
                   }
                   return "  " + label + ": " + formatted;
                 }
 
                 if (label.indexOf("DL %") !== -1) {
                   var fmtPct = value.toFixed(1) + "%";
-                  if (label === "DL % Actuals + Fcst") {
+                  if (label === "DL % Actual") {
                     var momDL = momDLChange[idx];
                     if (momDL !== null) {
                       var sign3 = momDL >= 0 ? "+" : "";
@@ -590,10 +595,7 @@
     });
   }
 
-  // ─── Table View (Quarterly) ──────────────────────────────────────────
-
-  var quarterNames = ["Q1", "Q2", "Q3", "Q4"];
-  var quarterMonths = [[0,1,2],[3,4,5],[6,7,8],[9,10,11]];
+  // ─── Table View ───────────────────────────────────────────────────────
 
   function buildTable(data) {
     var thead = document.getElementById("summary-thead");
@@ -602,27 +604,8 @@
     thead.innerHTML = "";
     tbody.innerHTML = "";
 
-    // Aggregate monthly data into quarters
-    var quarters = [];
-    for (var q = 0; q < 4; q++) {
-      var qLabor = 0, qBudget = 0, qRevenue = 0, qBudgetRevenue = 0;
-      var indices = quarterMonths[q];
-      for (var m = 0; m < 3; m++) {
-        var idx = indices[m];
-        qLabor += data.actualLabor[idx] || 0;
-        qBudget += data.budgetLabor[idx] || 0;
-      }
-      var variance = qLabor - qBudget;
-      quarters.push({
-        label: quarterNames[q] + " " + currentYear,
-        labor: qLabor,
-        budget: qBudget,
-        variance: variance
-      });
-    }
-
-    var headers = ["Quarter", "Actuals + Fcst", "Budget", "Variance"];
-    var numCols = [false, true, true, true];
+    var headers = ["Month", "Actual Labor $", "Budget Labor $", "Variance $", "DL % Actual", "DL % Budget", "DL % Var"];
+    var numCols = [false, true, true, true, true, true, true];
 
     headers.forEach(function (h, i) {
       var th = document.createElement("th");
@@ -631,32 +614,53 @@
       thead.appendChild(th);
     });
 
-    var totLabor = 0, totBudget = 0;
+    var totActual = 0;
+    var totBudget = 0;
 
-    quarters.forEach(function (q) {
-      totLabor += q.labor;
-      totBudget += q.budget;
+    data.months.forEach(function (month, i) {
+      var aLabor = data.actualLabor[i];
+      var bLabor = data.budgetLabor[i];
+      var variance = aLabor - bLabor;
+      var aDL = data.actualDL[i];
+      var bDL = data.budgetDL[i];
+      var dlVar = aDL - bDL;
+
+      totActual += aLabor;
+      totBudget += bLabor;
 
       var tr = document.createElement("tr");
+      tr.style.cursor = "pointer";
+      tr.setAttribute("data-month-key", data.monthKeys[i]);
+      tr.addEventListener("click", function () {
+        showDrilldown(this.getAttribute("data-month-key"));
+      });
 
-      var tdLabel = document.createElement("td");
-      tdLabel.className = "month-label";
-      tdLabel.textContent = q.label;
-      tr.appendChild(tdLabel);
+      var tdMonth = document.createElement("td");
+      tdMonth.className = "month-label";
+      tdMonth.textContent = month;
+      tr.appendChild(tdMonth);
 
-      tr.appendChild(makeMillionCell(q.labor));
-      tr.appendChild(makeMillionCell(q.budget));
+      tr.appendChild(makeCurrencyCell(aLabor));
+      tr.appendChild(makeCurrencyCell(bLabor));
 
-      var tdVar = makeMillionCell(q.variance);
-      if (q.variance > 0) tdVar.classList.add("negative");
-      else if (q.variance < 0) tdVar.classList.add("positive");
+      var tdVar = makeCurrencyCell(variance);
+      if (variance > 0) tdVar.classList.add("negative");
+      else if (variance < 0) tdVar.classList.add("positive");
       tr.appendChild(tdVar);
+
+      tr.appendChild(makePercentCell(aDL));
+      tr.appendChild(makePercentCell(bDL));
+
+      var tdDLVar = makePercentCell(dlVar, true);
+      if (dlVar > 0.01) tdDLVar.classList.add("negative");
+      else if (dlVar < -0.01) tdDLVar.classList.add("positive");
+      tr.appendChild(tdDLVar);
 
       tbody.appendChild(tr);
     });
 
     // Totals row
-    var totalVariance = totLabor - totBudget;
+    var totalVariance = totActual - totBudget;
     var trTotal = document.createElement("tr");
     trTotal.className = "totals-row";
 
@@ -665,23 +669,31 @@
     tdTotLabel.textContent = "Total";
     trTotal.appendChild(tdTotLabel);
 
-    trTotal.appendChild(makeMillionCell(totLabor));
-    trTotal.appendChild(makeMillionCell(totBudget));
+    trTotal.appendChild(makeCurrencyCell(totActual));
+    trTotal.appendChild(makeCurrencyCell(totBudget));
 
-    var tdTotVar = makeMillionCell(totalVariance);
+    var tdTotVar = makeCurrencyCell(totalVariance);
     if (totalVariance > 0) tdTotVar.classList.add("negative");
     else if (totalVariance < 0) tdTotVar.classList.add("positive");
     trTotal.appendChild(tdTotVar);
 
+    for (var x = 0; x < 3; x++) {
+      var tdBlank = document.createElement("td");
+      tdBlank.className = "num";
+      tdBlank.textContent = "\u2014";
+      trTotal.appendChild(tdBlank);
+    }
+
     tbody.appendChild(trTotal);
   }
 
-  function makeMillionCell(value) {
+  function makeCurrencyCell(value) {
     var td = document.createElement("td");
     td.className = "num";
-    var abs = Math.abs(value);
     var prefix = value < 0 ? "-$" : "$";
-    td.textContent = prefix + (abs / 1000000).toFixed(1) + "M";
+    td.textContent = prefix + Math.abs(value).toLocaleString("en-US", {
+      minimumFractionDigits: 0, maximumFractionDigits: 0
+    });
     return td;
   }
 

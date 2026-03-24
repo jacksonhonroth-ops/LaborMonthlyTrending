@@ -75,7 +75,7 @@ body {
 .legend-line {
   display: inline-block;
   width: 18px;
-  height: 3px;
+  height: 2px;
   position: relative;
 }
 
@@ -85,7 +85,7 @@ body {
 
 .legend-line.budget-line {
   background: #e8833a;
-  border-top: 3px dashed #e8833a;
+  border-top: 2px dashed #e8833a;
   height: 0;
 }
 
@@ -290,12 +290,11 @@ body {
 /* ─── Table View ─────────────────────────────────────────── */
 
 #table-container {
-  flex: 0 0 auto;
+  flex: 1;
   overflow: auto;
   min-height: 0;
   border: 1px solid #e8ecf1;
   border-radius: 10px;
-  align-self: flex-start;
 }
 
 #table-container.hidden {
@@ -303,9 +302,9 @@ body {
 }
 
 #summary-table {
-  width: auto;
+  width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 #summary-table th {
@@ -313,7 +312,7 @@ body {
   font-weight: 600;
   color: #5a6978;
   text-align: left;
-  padding: 10px 18px;
+  padding: 11px 14px;
   position: sticky;
   top: 0;
   border-bottom: 2px solid #dce1e8;
@@ -326,7 +325,7 @@ body {
 }
 
 #summary-table td {
-  padding: 8px 18px;
+  padding: 9px 14px;
   border-bottom: 1px solid #f0f2f5;
   color: #444;
 }
