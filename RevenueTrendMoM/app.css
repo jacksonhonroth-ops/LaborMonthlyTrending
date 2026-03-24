@@ -71,46 +71,20 @@ body {
   background: rgba(74, 144, 217, 0.55);
 }
 
-.legend-line {
+.legend-bar.budget {
+  background: rgba(232, 131, 58, 0.15);
+  border: 2px dashed #e8833a;
+}
+
+.legend-pill {
   display: inline-block;
-  width: 18px;
-  height: 2px;
-  position: relative;
-}
-
-.legend-line.budget-line {
-  background: #e8833a;
-}
-
-.legend-line.budget-line::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #e8833a;
-}
-
-.legend-line.mom-line {
-  background: #8e44ad;
-  border-top: 2px dashed #8e44ad;
-  height: 0;
-}
-
-.legend-line.mom-line::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #fff;
-  border: 1.5px solid #8e44ad;
+  font-size: 9px;
+  font-weight: 600;
+  color: #27ae60;
+  background: rgba(39, 174, 96, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.3;
 }
 
 /* ─── View Toggle ────────────────────────────────────────── */

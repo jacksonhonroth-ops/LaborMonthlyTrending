@@ -347,6 +347,57 @@
     };
   }
 
+  // ─── MoM label plugin ───────────────────────────────────────────────
+  // Draws MoM variance % as small badges above each bar group
+
+  var momLabelPlugin = {
+    id: 'momLabels',
+    afterDatasetsDraw: function (chart) {
+      var meta0 = chart.getDatasetMeta(0); // actual
+      var meta1 = chart.getDatasetMeta(1); // forecast
+      var momData = chart.data.datasets[3] ? chart.data.datasets[3].data : [];
+      if (!momData || momData.length === 0) return;
+
+      var ctx = chart.ctx;
+      ctx.save();
+      ctx.font = '600 10px "Open Sans", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+
+      for (var i = 0; i < momData.length; i++) {
+        if (momData[i] === null || momData[i] === undefined) continue;
+
+        // Find the visible bar for this index (actual or forecast)
+        var bar = (meta0.data[i] && meta0.data[i].y !== undefined && chart.data.datasets[0].data[i] !== null)
+          ? meta0.data[i]
+          : meta1.data[i];
+        if (!bar) continue;
+
+        var val = momData[i];
+        var sign = val >= 0 ? '+' : '';
+        var label = sign + val.toFixed(1) + '%';
+        var x = bar.x;
+        var y = bar.y - 8;
+
+        // Pill background
+        var textWidth = ctx.measureText(label).width;
+        var pw = textWidth + 10;
+        var ph = 16;
+        var px = x - pw / 2;
+        var py = y - ph + 2;
+
+        ctx.fillStyle = val > 0 ? 'rgba(39, 174, 96, 0.12)' : val < 0 ? 'rgba(231, 76, 60, 0.12)' : 'rgba(0,0,0,0.06)';
+        ctx.beginPath();
+        ctx.roundRect(px, py, pw, ph, 4);
+        ctx.fill();
+
+        ctx.fillStyle = val > 0 ? '#27ae60' : val < 0 ? '#e74c3c' : '#888';
+        ctx.fillText(label, x, y);
+      }
+      ctx.restore();
+    }
+  };
+
   // ─── Chart build ────────────────────────────────────────────────────
 
   function buildChart(data) {
@@ -359,65 +410,46 @@
 
     chartInstance = new Chart(ctx, {
       type: 'bar',
+      plugins: [momLabelPlugin],
       data: {
         labels: data.labels,
         datasets: [
           {
             label: 'Actual Revenue',
-            type: 'bar',
             data: data.actual,
-            backgroundColor: 'rgba(39, 174, 96, 0.8)',
+            backgroundColor: 'rgba(39, 174, 96, 0.85)',
             borderColor: 'rgba(39, 174, 96, 1)',
             borderWidth: 1,
             borderRadius: 3,
-            yAxisID: 'yDollars',
-            order: 4
-          },
-          {
-            label: 'Forecast Revenue',
-            type: 'bar',
-            data: data.forecast,
-            backgroundColor: 'rgba(74, 144, 217, 0.5)',
-            borderColor: 'rgba(74, 144, 217, 0.8)',
-            borderWidth: 1,
-            borderRadius: 3,
-            yAxisID: 'yDollars',
+            yAxisID: 'y',
             order: 3
           },
           {
-            label: 'Budget Revenue',
-            type: 'line',
-            data: data.budget,
-            borderColor: '#e8833a',
-            backgroundColor: 'rgba(232, 131, 58, 0.05)',
-            borderWidth: 2.5,
-            pointBackgroundColor: '#e8833a',
-            pointBorderColor: '#fff',
-            pointBorderWidth: 1.5,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            tension: 0.3,
-            fill: false,
-            yAxisID: 'yDollars',
+            label: 'Forecast Revenue',
+            data: data.forecast,
+            backgroundColor: 'rgba(74, 144, 217, 0.55)',
+            borderColor: 'rgba(74, 144, 217, 0.85)',
+            borderWidth: 1,
+            borderRadius: 3,
+            yAxisID: 'y',
             order: 2
           },
           {
-            label: 'MoM Variance %',
-            type: 'line',
-            data: data.momVarPct,
-            borderColor: '#8e44ad',
-            borderDash: [6, 4],
+            label: 'Budget Revenue',
+            data: data.budget,
+            backgroundColor: 'rgba(232, 131, 58, 0.15)',
+            borderColor: '#e8833a',
             borderWidth: 2,
-            pointBackgroundColor: '#fff',
-            pointBorderColor: '#8e44ad',
-            pointBorderWidth: 1.5,
-            pointRadius: 3,
-            pointHoverRadius: 5,
-            tension: 0.3,
-            fill: false,
-            yAxisID: 'yPercent',
-            order: 1,
-            spanGaps: true
+            borderDash: [4, 3],
+            borderRadius: 3,
+            yAxisID: 'y',
+            order: 1
+          },
+          {
+            label: 'MoM Variance %',
+            data: data.momVarPct,
+            hidden: true,
+            yAxisID: 'y'
           }
         ]
       },
@@ -425,6 +457,9 @@
         animation: false,
         responsive: true,
         maintainAspectRatio: false,
+        layout: {
+          padding: { top: 28 }
+        },
         interaction: {
           mode: 'index',
           intersect: false
@@ -437,20 +472,23 @@
             bodyFont: { size: 12 },
             padding: 10,
             cornerRadius: 6,
+            filter: function (item) {
+              return item.dataset.label !== 'MoM Variance %';
+            },
             callbacks: {
               label: function (context) {
                 var label = context.dataset.label || '';
                 var value = context.parsed.y;
                 if (value === null || value === undefined) return null;
-
-                if (label.indexOf('Revenue') !== -1) {
-                  return '  ' + label + ': ' + fmtCurrency(value);
-                }
-                if (label === 'MoM Variance %') {
-                  var sign = value >= 0 ? '+' : '';
-                  return '  ' + label + ': ' + sign + value.toFixed(1) + '%';
-                }
-                return '  ' + label + ': ' + value;
+                return '  ' + label + ': ' + fmtCurrency(value);
+              },
+              afterBody: function (tooltipItems) {
+                if (!tooltipItems.length) return '';
+                var idx = tooltipItems[0].dataIndex;
+                var mom = data.momVarPct[idx];
+                if (mom === null || mom === undefined) return '';
+                var sign = mom >= 0 ? '+' : '';
+                return '\n  MoM: ' + sign + mom.toFixed(1) + '%';
               }
             }
           }
@@ -460,15 +498,15 @@
             grid: { display: false },
             ticks: { font: { size: 11 }, color: '#888' }
           },
-          yDollars: {
+          y: {
             type: 'linear',
             position: 'left',
             beginAtZero: true,
             title: {
               display: true,
-              text: 'Revenue $',
+              text: 'Revenue',
               font: { size: 12, weight: '600' },
-              color: '#27ae60'
+              color: '#555'
             },
             grid: { color: 'rgba(0,0,0,0.06)' },
             ticks: {
@@ -476,24 +514,6 @@
               color: '#888',
               callback: function (value) {
                 return fmtCurrencyShort(value);
-              }
-            }
-          },
-          yPercent: {
-            type: 'linear',
-            position: 'right',
-            title: {
-              display: true,
-              text: 'MoM Var %',
-              font: { size: 12, weight: '600' },
-              color: '#8e44ad'
-            },
-            grid: { drawOnChartArea: false },
-            ticks: {
-              font: { size: 11 },
-              color: '#888',
-              callback: function (value) {
-                return value.toFixed(0) + '%';
               }
             }
           }
