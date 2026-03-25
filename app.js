@@ -1,38 +1,53 @@
 // Labor MOM Trending Card
-// Data source: Job_Financials_wo_JoinV2 (977fd639-75bb-422c-8773-a26488330bca)
-// Uses SQL aggregation to reduce data transfer — only fetches Total Labor + Service Revenue
-// Compares ACTUAL vs OPS_FIN_BUDGET, drill-down on click, filter by Region/Job/Account/OpsLead
+// Dataset: JOB_FINANCIALS_wo_JOIN_v2 (977fd639-75bb-422c-8773-a26488330bca)
+// Combo chart: Actual/Forecast Labor vs Budget Labor (bars) + DL% and DL% Budget (lines)
+// Uses most_recent_closing_period to determine closed vs open months
+// Pulls ACTUAL, JOB_FORECAST, and OPS_FIN_BUDGET for Total Labor + Service Revenue
 
 (function () {
   'use strict';
 
   // P&L Category Name values
-  var laborCategories = ["Total Labor"];
-  var revenueCategory = "Service Revenue";
+  var laborCategories = ['Total Labor'];
+  var revenueCategory = 'Service Revenue';
 
   // Source values
-  var sourceActual = "ACTUAL";
-  var sourceBudget = "OPS_FIN_BUDGET";
+  var sourceActual = 'ACTUAL';
+  var sourceBudget = 'OPS_FIN_BUDGET';
+  var sourceForecast = 'JOB_FORECAST';
 
-  // Current year filter
-  var currentYear = 2026;
-
-  // SQL query — pre-aggregate server-side, only fetch needed categories/sources
-  var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `P&L Category Name` as `Category`, " +
-    "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
-    "SUM(`Amount`) as `Amount` " +
-    "FROM dataset " +
-    "WHERE `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET') " +
-    "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
-    "GROUP BY `MONTH`, `SOURCE`, `P&L Category Name`, `Region`, " +
-    "`JobNumber`, `Parent Account`, `Operations Lead`";
+  var currentYear = new Date().getFullYear();
 
   var monthNames = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
   ];
 
-  // Find a column index by trying multiple possible names
+  // SQL query — pre-aggregate at dataset level using MONTH field.
+  // Uses SELECT DISTINCT in a subquery to deduplicate forecast rows
+  // (the forecast ETL keeps multiple uploads without deduplication,
+  // so identical rows appear 2+ times and SUM doubles the amounts).
+  // NOTE: most_recent_closing_period is fetched via MAX() so it does NOT
+  // appear in the GROUP BY to avoid splitting budget rows.
+  var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `Category`, " +
+    "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
+    "MAX(`most_recent_closing_period`) as `most_recent_closing_period`, " +
+    "SUM(`Amount`) as `Amount` " +
+    "FROM (" +
+    "  SELECT DISTINCT `MONTH`, `SOURCE`, `P&L Category Name` as `Category`, " +
+    "  `Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
+    "  `most_recent_closing_period`, `Amount` " +
+    "  FROM dataset " +
+    "  WHERE `KeepActiveData` = 1 " +
+    "  AND `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET', 'JOB_FORECAST') " +
+    "  AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
+    "  AND YEAR(`MONTH`) = " + currentYear +
+    ") deduped " +
+    "GROUP BY `MONTH`, `SOURCE`, `Category`, `Region`, " +
+    "`JobNumber`, `Parent Account`, `Operations Lead`";
+
+  // ─── Utilities ──────────────────────────────────────────────────────
+
   function findCol(columns, names) {
     for (var i = 0; i < names.length; i++) {
       var idx = columns.indexOf(names[i]);
@@ -41,57 +56,205 @@
     return -1;
   }
 
-  // Parse a DOMO date value to a Date object (handles epoch ms and ISO strings)
   function parseDate(raw) {
-    if (typeof raw === "number") return new Date(raw);
+    if (typeof raw === 'number') return new Date(raw);
     var s = String(raw);
     if (/^\d{10,}$/.test(s)) return new Date(parseInt(s, 10));
     return new Date(s);
   }
 
-  var loader = document.getElementById("loader");
-  var loaderText = document.getElementById("loader-text");
+  // Parse closing period to a monthKey.
+  // If the value is a date string like "2026-02-01", extract year-month directly
+  // to avoid UTC timezone shifting (which would turn Feb 1 into Jan 31 UTC).
+  // For epoch timestamps, parse normally with UTC.
+  function closingPeriodToKey(raw) {
+    var s = String(raw);
+    // Try to extract YYYY-MM from an ISO-style date string first
+    var match = s.match(/^(\d{4})-(\d{2})/);
+    if (match) {
+      return match[1] + '-' + match[2];
+    }
+    // Fallback for epoch timestamps — use UTC like the rest of the app
+    var d = parseDate(raw);
+    return mkKey(d);
+  }
 
-  loaderText.textContent = "Fetching from Job Financials...";
+  function mkKey(d) {
+    var year = d.getUTCFullYear();
+    var mm = ('0' + (d.getUTCMonth() + 1)).slice(-2);
+    return year + '-' + mm;
+  }
 
-  // Store raw data for drill-down and filtering
+  function monthLabel(key) {
+    var parts = key.split('-');
+    var monthNum = parseInt(parts[1], 10);
+    return monthNames[monthNum - 1] + ' ' + parts[0];
+  }
+
+  function fmtCurrency(value) {
+    var prefix = value < 0 ? '-$' : '$';
+    return prefix + Math.abs(value).toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    });
+  }
+
+  function fmtCurrencyShort(value) {
+    var abs = Math.abs(value);
+    if (abs >= 1000000) return (value < 0 ? '-$' : '$') + (abs / 1000000).toFixed(1) + 'M';
+    if (abs >= 1000) return (value < 0 ? '-$' : '$') + (abs / 1000).toFixed(0) + 'K';
+    return fmtCurrency(value);
+  }
+
+  // Normalize amounts by source:
+  // - Revenue: actuals stored as negative (GL credits) → negate to positive
+  //            budget/forecast stored as positive → keep as-is
+  // - Labor: always positive regardless of source
+  function normalizeAmount(amount, source, category) {
+    var val = parseFloat(amount) || 0;
+    if (category === revenueCategory && source === sourceActual) {
+      return Math.abs(val);
+    }
+    return val;
+  }
+
+  // ─── State ──────────────────────────────────────────────────────────
+
   var rawRows = null;
-  var colIndices = null;
+  var col = null;
+  var closingPeriodKey = null;
   var chartInstance = null;
-  var currentView = "chart"; // "chart" or "table"
+  var currentView = 'chart';
+
+  var loader = document.getElementById('loader');
+  var loaderText = document.getElementById('loader-text');
+
+  loaderText.textContent = 'Fetching labor data...';
+
+  // ─── Debug ─────────────────────────────────────────────────────────
+
+  function showDebug(cols, rows) {
+    var panel = document.getElementById('debug-panel');
+    if (!panel) return;
+    panel.style.display = 'block';
+
+    var lines = [];
+    lines.push('=== LABOR MOM DEBUG ===');
+    lines.push('rows: ' + rows.length + ' | closingPeriod: ' + closingPeriodKey + ' | year: ' + currentYear);
+    lines.push('');
+
+    // SUM Total Labor amounts per source per month (the most critical view)
+    var laborBySourceMonth = {};
+    var revBySourceMonth = {};
+    var rowsBySourceMonth = {};
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r];
+      var d = parseDate(row[col.date]);
+      if (d.getUTCFullYear() !== currentYear) continue;
+      var src = row[col.source];
+      var cat = row[col.category];
+      var mk = mkKey(d);
+      var amt = parseFloat(row[col.amount]) || 0;
+      var k = src + ' | ' + mk;
+      if (!rowsBySourceMonth[k]) rowsBySourceMonth[k] = 0;
+      rowsBySourceMonth[k]++;
+      if (cat === 'Total Labor') {
+        laborBySourceMonth[k] = (laborBySourceMonth[k] || 0) + amt;
+      } else {
+        revBySourceMonth[k] = (revBySourceMonth[k] || 0) + amt;
+      }
+    }
+
+    lines.push('--- TOTAL LABOR $ by Source | Month ---');
+    Object.keys(laborBySourceMonth).sort().forEach(function (k) {
+      var val = laborBySourceMonth[k];
+      var cnt = rowsBySourceMonth[k] || 0;
+      lines.push('  ' + k + ': $' + Math.round(val).toLocaleString() + ' (' + cnt + ' rows)');
+    });
+    lines.push('');
+
+    lines.push('--- SERVICE REVENUE $ by Source | Month ---');
+    Object.keys(revBySourceMonth).sort().forEach(function (k) {
+      var val = revBySourceMonth[k];
+      lines.push('  ' + k + ': $' + Math.round(val).toLocaleString());
+    });
+    lines.push('');
+
+    // Row counts by source
+    lines.push('--- Row counts ---');
+    var srcCounts = {};
+    for (var r2 = 0; r2 < rows.length; r2++) {
+      var s = rows[r2][col.source];
+      srcCounts[s] = (srcCounts[s] || 0) + 1;
+    }
+    Object.keys(srcCounts).sort().forEach(function (s) {
+      lines.push('  ' + s + ': ' + srcCounts[s]);
+    });
+
+    // Date parsing check
+    if (rows.length > 0) {
+      var rawDate = rows[0][col.date];
+      var parsed = parseDate(rawDate);
+      lines.push('');
+      lines.push('date check: raw=' + rawDate + ' → mkKey=' + mkKey(parsed));
+    }
+
+    panel.textContent = lines.join('\n');
+  }
+
+  // ─── Data fetch ─────────────────────────────────────────────────────
 
   domo.post('/sql/v1/dataset', SQL_QUERY, { contentType: 'text/plain' })
     .then(function (resp) {
-      loaderText.textContent = "Building chart...";
+      loaderText.textContent = 'Building view...';
       var cols = resp.columns;
       rawRows = resp.rows;
-      colIndices = {
-        month: findCol(cols, ["MONTH", "Month", "month"]),
-        amount: findCol(cols, ["Amount", "amount", "AMOUNT"]),
-        category: findCol(cols, ["Category", "P&L Category Name", "PLCategoryName"]),
-        source: findCol(cols, ["SOURCE", "Source", "source"]),
-        region: findCol(cols, ["Region", "region", "REGION"]),
-        job: findCol(cols, ["JobNumber", "Job Number", "JOB_NUMBER"]),
-        account: findCol(cols, ["Parent Account", "ParentAccount", "PARENT_ACCOUNT"]),
-        opsLead: findCol(cols, ["Operations Lead", "OperationsLead", "OpsLead", "OPS_LEAD"])
+      col = {
+        date: findCol(cols, ['MONTH', 'Month', 'month']),
+        amount: findCol(cols, ['Amount', 'amount', 'AMOUNT']),
+        category: findCol(cols, ['Category', 'P&L Category Name', 'PLCategoryName']),
+        source: findCol(cols, ['SOURCE', 'Source', 'source']),
+        region: findCol(cols, ['Region', 'region', 'REGION']),
+        job: findCol(cols, ['JobNumber', 'jobnumber', 'JOB_NUMBER']),
+        account: findCol(cols, ['Parent Account', 'ParentAccount', 'PARENT_ACCOUNT']),
+        opsLead: findCol(cols, ['Operations Lead', 'OperationsLead', 'OpsLead']),
+        closingPeriod: findCol(cols, ['most_recent_closing_period', 'mostRecentClosingPeriod'])
       };
+
+      // Determine closing period from the first row that has it.
+      // Use local time parsing so "2026-02-01" → Feb, not Jan (UTC shift).
+      for (var r = 0; r < rawRows.length; r++) {
+        if (col.closingPeriod >= 0 && rawRows[r][col.closingPeriod]) {
+          closingPeriodKey = closingPeriodToKey(rawRows[r][col.closingPeriod]);
+          break;
+        }
+      }
+      // Fallback: if no closing period found, use prior month
+      if (!closingPeriodKey) {
+        var now = new Date();
+        closingPeriodKey = now.getFullYear() + '-' + ('0' + now.getMonth()).slice(-2);
+      }
+
+      // ── DEBUG: dump data structure ──
+      showDebug(cols, rawRows);
+
       populateFilters();
       refreshView();
-      loader.classList.add("hidden");
+      loader.classList.add('hidden');
     })
     .catch(function (err) {
       var msg = err && err.message ? err.message : JSON.stringify(err);
-      loaderText.textContent = "SQL error: " + msg;
+      loaderText.textContent = 'SQL error: ' + msg;
     });
 
-  // ─── Filters ──────────────────────────────────────────────────────────
+  // ─── Filters ────────────────────────────────────────────────────────
 
-  var filterRegion = document.getElementById("filter-region");
-  var filterOps = document.getElementById("filter-ops");
-  var filterJob = document.getElementById("filter-job");
-  var filterAccount = document.getElementById("filter-account");
-  var jobList = document.getElementById("job-list");
-  var accountList = document.getElementById("account-list");
+  var filterRegion = document.getElementById('filter-region');
+  var filterOps = document.getElementById('filter-ops');
+  var filterJob = document.getElementById('filter-job');
+  var filterAccount = document.getElementById('filter-account');
+  var jobList = document.getElementById('job-list');
+  var accountList = document.getElementById('account-list');
 
   function populateFilters() {
     var regions = {};
@@ -101,11 +264,11 @@
 
     for (var r = 0; r < rawRows.length; r++) {
       var row = rawRows[r];
-      var rgn = colIndices.region >= 0 ? row[colIndices.region] : null;
-      var j = colIndices.job >= 0 ? row[colIndices.job] : null;
-      var a = colIndices.account >= 0 ? row[colIndices.account] : null;
-      var o = colIndices.opsLead >= 0 ? row[colIndices.opsLead] : null;
-      if (rgn && rgn !== "HQ") regions[rgn] = true;
+      var rgn = col.region >= 0 ? row[col.region] : null;
+      var j = col.job >= 0 ? row[col.job] : null;
+      var a = col.account >= 0 ? row[col.account] : null;
+      var o = col.opsLead >= 0 ? row[col.opsLead] : null;
+      if (rgn && rgn !== 'HQ') regions[rgn] = true;
       if (j) jobs[j] = true;
       if (a) accounts[a] = true;
       if (o) leads[o] = true;
@@ -119,7 +282,7 @@
 
   function fillSelect(el, values) {
     values.forEach(function (v) {
-      var opt = document.createElement("option");
+      var opt = document.createElement('option');
       opt.value = v;
       opt.textContent = v;
       el.appendChild(opt);
@@ -128,36 +291,34 @@
 
   function fillDatalist(el, values) {
     values.forEach(function (v) {
-      var opt = document.createElement("option");
+      var opt = document.createElement('option');
       opt.value = v;
       el.appendChild(opt);
     });
   }
 
-  // Filter change listeners — dropdowns
+  // Filter change listeners
   [filterRegion, filterOps].forEach(function (el) {
-    el.addEventListener("change", refreshView);
+    el.addEventListener('change', refreshView);
   });
 
-  // Search inputs — debounced refresh on input
   var searchTimer = null;
   [filterJob, filterAccount].forEach(function (el) {
-    el.addEventListener("input", function () {
+    el.addEventListener('input', function () {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(refreshView, 300);
     });
-    el.addEventListener("change", refreshView);
+    el.addEventListener('change', refreshView);
   });
 
-  document.getElementById("filter-clear").addEventListener("click", function () {
-    filterRegion.value = "";
-    filterOps.value = "";
-    filterJob.value = "";
-    filterAccount.value = "";
+  document.getElementById('filter-clear').addEventListener('click', function () {
+    filterRegion.value = '';
+    filterOps.value = '';
+    filterJob.value = '';
+    filterAccount.value = '';
     refreshView();
   });
 
-  // Apply filters to raw rows
   function getFilteredRows() {
     var rVal = filterRegion.value;
     var oVal = filterOps.value;
@@ -170,155 +331,165 @@
     var aLower = aVal.toLowerCase();
 
     return rawRows.filter(function (row) {
-      if (colIndices.region >= 0 && row[colIndices.region] === "HQ") return false;
-      if (rVal && colIndices.region >= 0 && row[colIndices.region] !== rVal) return false;
-      if (oVal && colIndices.opsLead >= 0 && row[colIndices.opsLead] !== oVal) return false;
-      if (jVal && colIndices.job >= 0) {
-        var rowJob = (row[colIndices.job] || "").toString().toLowerCase();
+      if (col.region >= 0 && row[col.region] === 'HQ') return false;
+      if (rVal && col.region >= 0 && row[col.region] !== rVal) return false;
+      if (oVal && col.opsLead >= 0 && row[col.opsLead] !== oVal) return false;
+      if (jVal && col.job >= 0) {
+        var rowJob = (row[col.job] || '').toString().toLowerCase();
         if (rowJob.indexOf(jLower) === -1) return false;
       }
-      if (aVal && colIndices.account >= 0) {
-        var rowAcct = (row[colIndices.account] || "").toString().toLowerCase();
+      if (aVal && col.account >= 0) {
+        var rowAcct = (row[col.account] || '').toString().toLowerCase();
         if (rowAcct.indexOf(aLower) === -1) return false;
       }
       return true;
     });
   }
 
-  // ─── View toggle ──────────────────────────────────────────────────────
+  // ─── View toggle ────────────────────────────────────────────────────
 
-  var btnChart = document.getElementById("btn-chart");
-  var btnTable = document.getElementById("btn-table");
-  var chartContainer = document.getElementById("chart-container");
-  var tableContainer = document.getElementById("table-container");
+  var btnChart = document.getElementById('btn-chart');
+  var btnTable = document.getElementById('btn-table');
+  var chartContainer = document.getElementById('chart-container');
+  var tableContainer = document.getElementById('table-container');
 
-  btnChart.addEventListener("click", function () {
-    if (currentView === "chart") return;
-    currentView = "chart";
-    btnChart.classList.add("active");
-    btnTable.classList.remove("active");
-    chartContainer.classList.remove("hidden");
-    tableContainer.classList.add("hidden");
+  btnChart.addEventListener('click', function () {
+    if (currentView === 'chart') return;
+    currentView = 'chart';
+    btnChart.classList.add('active');
+    btnTable.classList.remove('active');
+    chartContainer.classList.remove('hidden');
+    tableContainer.classList.add('hidden');
     refreshView();
   });
 
-  btnTable.addEventListener("click", function () {
-    if (currentView === "table") return;
-    currentView = "table";
-    btnTable.classList.add("active");
-    btnChart.classList.remove("active");
-    tableContainer.classList.remove("hidden");
-    chartContainer.classList.add("hidden");
+  btnTable.addEventListener('click', function () {
+    if (currentView === 'table') return;
+    currentView = 'table';
+    btnTable.classList.add('active');
+    btnChart.classList.remove('active');
+    tableContainer.classList.remove('hidden');
+    chartContainer.classList.add('hidden');
     refreshView();
   });
 
-  // ─── Refresh ──────────────────────────────────────────────────────────
+  // ─── Refresh ────────────────────────────────────────────────────────
 
   function refreshView() {
     if (!rawRows) return;
     var filteredRows = getFilteredRows();
     var processed = aggregateData(filteredRows);
 
-    if (currentView === "chart") {
+    if (currentView === 'chart') {
       buildChart(processed);
     } else {
       buildTable(processed);
     }
   }
 
-  // ─── Aggregation ──────────────────────────────────────────────────────
+  // ─── Aggregation ────────────────────────────────────────────────────
 
   function aggregateData(rows) {
+    // Three buckets: actual, forecast, budget
+    // Each keyed by monthKey → { labor, revenue }
     var actual = {};
     var forecast = {};
+    var budget = {};
 
     for (var r = 0; r < rows.length; r++) {
       var row = rows[r];
-      var monthRaw = row[colIndices.month];
-      var amount = parseFloat(row[colIndices.amount]) || 0;
-      var category = row[colIndices.category];
-      var source = row[colIndices.source];
+      var source = row[col.source];
+      var category = row[col.category];
 
-      if (source !== sourceActual && source !== sourceBudget) continue;
+      if (source !== sourceActual && source !== sourceBudget && source !== sourceForecast) continue;
+      if (laborCategories.indexOf(category) === -1 && category !== revenueCategory) continue;
 
-      var d = parseDate(monthRaw);
-      var year = d.getUTCFullYear();
-      if (year !== currentYear) continue;
+      var d = parseDate(row[col.date]);
+      if (d.getUTCFullYear() !== currentYear) continue;
+      var mk = mkKey(d);
+      var amount = normalizeAmount(row[col.amount], source, category);
 
-      var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
-      var monthKey = year + "-" + mm;
+      var target;
+      if (source === sourceActual) target = actual;
+      else if (source === sourceForecast) target = forecast;
+      else target = budget;
 
-      var target = (source === sourceActual) ? actual : forecast;
-      if (!target[monthKey]) {
-        target[monthKey] = { labor: 0, revenue: 0 };
-      }
+      if (!target[mk]) target[mk] = { labor: 0, revenue: 0 };
 
       if (laborCategories.indexOf(category) !== -1) {
-        target[monthKey].labor += amount;
+        target[mk].labor += amount;
       } else if (category === revenueCategory) {
-        // Revenue is stored as negative (credit convention) — negate to positive
-        target[monthKey].revenue += amount * -1;
+        target[mk].revenue += amount;
       }
     }
 
-    // Build sorted month keys from all data
-    var allKeys = {};
-    Object.keys(actual).forEach(function (k) { allKeys[k] = true; });
-    Object.keys(forecast).forEach(function (k) { allKeys[k] = true; });
-    var sortedKeys = Object.keys(allKeys).sort();
-
-    // Determine current month key — months not yet closed should be FCST
-    var now = new Date();
-    var curMonthKey = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+    // Build full 12-month year
+    var sortedKeys = [];
+    for (var m = 1; m <= 12; m++) {
+      sortedKeys.push(currentYear + '-' + ('0' + m).slice(-2));
+    }
 
     var months = [];
-    var actualLabor = [];
-    var budgetLabor = [];
-    var actualDL = [];
-    var budgetDL = [];
-    var monthSources = [];
     var monthKeys = [];
+    var monthSources = [];
+    var actualFcstLabor = [];  // actual or forecast labor
+    var budgetLaborArr = [];   // budget labor
+    var actualDL = [];         // DL% based on actual or forecast
+    var budgetDL = [];         // DL% based on budget
 
     sortedKeys.forEach(function (key) {
-      var parts = key.split("-");
+      var parts = key.split('-');
       var monthNum = parseInt(parts[1], 10);
 
-      var a = actual[key];
+      var isClosed = key <= closingPeriodKey;
+
+      var a = actual[key] || { labor: 0, revenue: 0 };
       var f = forecast[key] || { labor: 0, revenue: 0 };
+      var b = budget[key] || { labor: 0, revenue: 0 };
 
-      var useActual = key < curMonthKey && a && (a.labor !== 0 || a.revenue !== 0);
-      var display = useActual ? a : f;
+      // For display: closed months use actual, open months use forecast (fallback to actual)
+      var display;
+      var srcLabel;
+      if (isClosed) {
+        display = a;
+        srcLabel = 'ACT';
+      } else {
+        // Use forecast if available, otherwise fall back to actual
+        display = (f.labor !== 0 || f.revenue !== 0) ? f : a;
+        srcLabel = 'FCST';
+      }
 
-      var label = monthNames[monthNum - 1] + " " + parts[0];
+      var label = monthNames[monthNum - 1] + ' ' + parts[0];
       months.push(label);
       monthKeys.push(key);
-      monthSources.push(useActual ? "ACT" : "FCST");
+      monthSources.push(srcLabel);
 
-      actualLabor.push(display.labor);
-      budgetLabor.push(f.labor);
+      actualFcstLabor.push(display.labor);
+      budgetLaborArr.push(b.labor);
 
+      // DL% = Labor / Revenue * 100
       var dispRev = display.revenue;
-      var fRev = f.revenue;
+      var bRev = b.revenue;
       actualDL.push(dispRev !== 0 ? parseFloat(((display.labor / dispRev) * 100).toFixed(2)) : 0);
-      budgetDL.push(fRev !== 0 ? parseFloat(((f.labor / fRev) * 100).toFixed(2)) : 0);
+      budgetDL.push(bRev !== 0 ? parseFloat(((b.labor / bRev) * 100).toFixed(2)) : 0);
     });
 
     return {
       months: months,
       monthKeys: monthKeys,
       monthSources: monthSources,
-      actualLabor: actualLabor,
-      budgetLabor: budgetLabor,
+      actualFcstLabor: actualFcstLabor,
+      budgetLabor: budgetLaborArr,
       actualDL: actualDL,
       budgetDL: budgetDL
     };
   }
 
-  // ─── Chart ────────────────────────────────────────────────────────────
+  // ─── Chart ──────────────────────────────────────────────────────────
 
   function buildChart(data) {
     var months = data.months;
-    var actualLabor = data.actualLabor;
+    var actualLabor = data.actualFcstLabor;
     var budgetLabor = data.budgetLabor;
     var actualDL = data.actualDL;
     var budgetDL = data.budgetDL;
@@ -326,14 +497,14 @@
     var monthSources = data.monthSources;
 
     var barColors = monthSources.map(function (s) {
-      return s === "ACT" ? "rgba(74, 144, 217, 0.85)" : "rgba(74, 144, 217, 0.45)";
+      return s === 'ACT' ? 'rgba(74, 144, 217, 0.85)' : 'rgba(74, 144, 217, 0.45)';
     });
     var barBorders = monthSources.map(function (s) {
-      return s === "ACT" ? "rgba(74, 144, 217, 1)" : "rgba(74, 144, 217, 0.7)";
+      return s === 'ACT' ? 'rgba(74, 144, 217, 1)' : 'rgba(74, 144, 217, 0.7)';
     });
 
     var xLabels = months.map(function (m, i) {
-      return m + "\n(" + monthSources[i] + ")";
+      return m + '\n(' + monthSources[i] + ')';
     });
 
     // MOM changes
@@ -354,77 +525,78 @@
       chartInstance = null;
     }
 
-    var ctx = document.getElementById("trendChart").getContext("2d");
+    var ctx = document.getElementById('trendChart').getContext('2d');
 
     chartInstance = new Chart(ctx, {
-      type: "bar",
+      type: 'bar',
       data: {
         labels: xLabels,
         datasets: [
           {
-            label: "Actual Labor $",
-            type: "bar",
+            label: 'Actual / Forecast',
+            type: 'bar',
             data: actualLabor,
             backgroundColor: barColors,
             borderColor: barBorders,
             borderWidth: 1,
             borderRadius: 3,
-            yAxisID: "yDollars",
+            yAxisID: 'yDollars',
             order: 4
           },
           {
-            label: "Budget Labor $",
-            type: "bar",
+            label: 'Budget',
+            type: 'bar',
             data: budgetLabor,
-            backgroundColor: "rgba(74, 144, 217, 0.2)",
-            borderColor: "rgba(74, 144, 217, 0.6)",
+            backgroundColor: 'rgba(74, 144, 217, 0.2)',
+            borderColor: 'rgba(74, 144, 217, 0.6)',
             borderWidth: 1,
             borderRadius: 3,
             borderDash: [4, 3],
-            yAxisID: "yDollars",
+            yAxisID: 'yDollars',
             order: 3
           },
           {
-            label: "DL % Actual",
-            type: "line",
+            label: 'DL %',
+            type: 'line',
             data: actualDL,
-            borderColor: "#e8833a",
-            backgroundColor: "rgba(232, 131, 58, 0.1)",
+            borderColor: '#e8833a',
+            backgroundColor: 'rgba(232, 131, 58, 0.1)',
             borderWidth: 2.5,
-            pointBackgroundColor: "#e8833a",
-            pointBorderColor: "#fff",
+            pointBackgroundColor: '#e8833a',
+            pointBorderColor: '#fff',
             pointBorderWidth: 1.5,
             pointRadius: 4,
             pointHoverRadius: 6,
             tension: 0.3,
             fill: false,
-            yAxisID: "yPercent",
+            yAxisID: 'yPercent',
             order: 1
           },
           {
-            label: "DL % Budget",
-            type: "line",
+            label: 'DL % Budget',
+            type: 'line',
             data: budgetDL,
-            borderColor: "#e8833a",
+            borderColor: '#e8833a',
             borderDash: [6, 4],
             borderWidth: 1.5,
-            pointBackgroundColor: "#fff",
-            pointBorderColor: "#e8833a",
+            pointBackgroundColor: '#fff',
+            pointBorderColor: '#e8833a',
             pointBorderWidth: 1.5,
             pointRadius: 3,
             pointHoverRadius: 5,
             tension: 0.3,
             fill: false,
-            yAxisID: "yPercent",
+            yAxisID: 'yPercent',
             order: 2
           }
         ]
       },
       options: {
+        animation: false,
         responsive: true,
         maintainAspectRatio: false,
         interaction: {
-          mode: "index",
+          mode: 'index',
           intersect: false
         },
         plugins: {
@@ -432,61 +604,61 @@
             display: false
           },
           tooltip: {
-            backgroundColor: "rgba(0,0,0,0.8)",
-            titleFont: { size: 13, weight: "600" },
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            titleFont: { size: 13, weight: '600' },
             bodyFont: { size: 12 },
             padding: 10,
             cornerRadius: 6,
             callbacks: {
               label: function (context) {
-                var label = context.dataset.label || "";
+                var label = context.dataset.label || '';
                 var value = context.parsed.y;
                 var idx = context.dataIndex;
 
-                if (label.indexOf("Labor $") !== -1) {
-                  var formatted = "$" + value.toLocaleString("en-US", {
+                if (label === 'Actual / Forecast' || label === 'Budget') {
+                  var formatted = '$' + value.toLocaleString('en-US', {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 0
                   });
-                  if (label === "Actual Labor $") {
+                  if (label === 'Actual / Forecast') {
                     var mom = momLaborChange[idx];
                     if (mom !== null) {
-                      var sign = mom >= 0 ? "+" : "";
-                      formatted += "  (" + sign + "$" + mom.toLocaleString("en-US", {
+                      var sign = mom >= 0 ? '+' : '';
+                      formatted += '  (' + sign + '$' + mom.toLocaleString('en-US', {
                         minimumFractionDigits: 0,
                         maximumFractionDigits: 0
-                      }) + " MOM)";
+                      }) + ' MOM)';
                     }
                   }
-                  if (label === "Budget Labor $") {
+                  if (label === 'Budget') {
                     var variance = actualLabor[idx] - budgetLabor[idx];
-                    var sign2 = variance >= 0 ? "+" : "";
-                    formatted += "  (var: " + sign2 + "$" + variance.toLocaleString("en-US", {
+                    var sign2 = variance >= 0 ? '+' : '';
+                    formatted += '  (var: ' + sign2 + '$' + variance.toLocaleString('en-US', {
                       minimumFractionDigits: 0,
                       maximumFractionDigits: 0
-                    }) + ")";
+                    }) + ')';
                   }
-                  return "  " + label + ": " + formatted;
+                  return '  ' + label + ': ' + formatted;
                 }
 
-                if (label.indexOf("DL %") !== -1) {
-                  var fmtPct = value.toFixed(1) + "%";
-                  if (label === "DL % Actual") {
+                if (label.indexOf('DL %') !== -1) {
+                  var fmtPct = value.toFixed(1) + '%';
+                  if (label === 'DL %') {
                     var momDL = momDLChange[idx];
                     if (momDL !== null) {
-                      var sign3 = momDL >= 0 ? "+" : "";
-                      fmtPct += "  (" + sign3 + momDL.toFixed(1) + "pp MOM)";
+                      var sign3 = momDL >= 0 ? '+' : '';
+                      fmtPct += '  (' + sign3 + momDL.toFixed(1) + 'pp MOM)';
                     }
                   }
-                  if (label === "DL % Budget") {
+                  if (label === 'DL % Budget') {
                     var dlVar = actualDL[idx] - budgetDL[idx];
-                    var sign4 = dlVar >= 0 ? "+" : "";
-                    fmtPct += "  (var: " + sign4 + dlVar.toFixed(1) + "pp)";
+                    var sign4 = dlVar >= 0 ? '+' : '';
+                    fmtPct += '  (var: ' + sign4 + dlVar.toFixed(1) + 'pp)';
                   }
-                  return "  " + label + ": " + fmtPct;
+                  return '  ' + label + ': ' + fmtPct;
                 }
 
-                return "  " + label + ": " + value;
+                return '  ' + label + ': ' + value;
               }
             }
           }
@@ -496,46 +668,44 @@
             grid: { display: false },
             ticks: {
               font: { size: 11 },
-              color: "#888"
+              color: '#888'
             }
           },
           yDollars: {
-            type: "linear",
-            position: "left",
+            type: 'linear',
+            position: 'left',
             beginAtZero: true,
             title: {
               display: true,
-              text: "Labor $",
-              font: { size: 12, weight: "600" },
-              color: "#4a90d9"
+              text: 'Labor $',
+              font: { size: 12, weight: '600' },
+              color: '#4a90d9'
             },
-            grid: { color: "rgba(0,0,0,0.06)" },
+            grid: { color: 'rgba(0,0,0,0.06)' },
             ticks: {
               font: { size: 11 },
-              color: "#888",
+              color: '#888',
               callback: function (value) {
-                if (value >= 1000000) return "$" + (value / 1000000).toFixed(1) + "M";
-                if (value >= 1000) return "$" + (value / 1000).toFixed(0) + "K";
-                return "$" + value;
+                return fmtCurrencyShort(value);
               }
             }
           },
           yPercent: {
-            type: "linear",
-            position: "right",
+            type: 'linear',
+            position: 'right',
             beginAtZero: true,
             title: {
               display: true,
-              text: "DL %",
-              font: { size: 12, weight: "600" },
-              color: "#e8833a"
+              text: 'DL %',
+              font: { size: 12, weight: '600' },
+              color: '#e8833a'
             },
             grid: { drawOnChartArea: false },
             ticks: {
               font: { size: 11 },
-              color: "#888",
+              color: '#888',
               callback: function (value) {
-                return value.toFixed(0) + "%";
+                return value.toFixed(0) + '%';
               }
             }
           }
@@ -543,28 +713,28 @@
         onClick: function (event, elements) {
           if (elements.length === 0) return;
           var idx = elements[0].index;
-          var monthKey = monthKeys[idx];
-          showDrilldown(monthKey);
+          var mk = monthKeys[idx];
+          showDrilldown(mk);
         }
       }
     });
   }
 
-  // ─── Table View ───────────────────────────────────────────────────────
+  // ─── Table View ─────────────────────────────────────────────────────
 
   function buildTable(data) {
-    var thead = document.getElementById("summary-thead");
-    var tbody = document.getElementById("summary-tbody");
-    thead.innerHTML = "";
-    tbody.innerHTML = "";
+    var thead = document.getElementById('summary-thead');
+    var tbody = document.getElementById('summary-tbody');
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
 
-    var headers = ["Month", "Actual Labor $", "Budget Labor $", "Variance $", "DL % Actual", "DL % Budget", "DL % Var"];
+    var headers = ['Month', 'Actual/Fcst Labor $', 'Budget Labor $', 'Variance $', 'DL %', 'DL % Budget', 'DL % Var'];
     var numCols = [false, true, true, true, true, true, true];
 
     headers.forEach(function (h, i) {
-      var th = document.createElement("th");
+      var th = document.createElement('th');
       th.textContent = h;
-      if (numCols[i]) th.className = "num";
+      if (numCols[i]) th.className = 'num';
       thead.appendChild(th);
     });
 
@@ -572,7 +742,7 @@
     var totBudget = 0;
 
     data.months.forEach(function (month, i) {
-      var aLabor = data.actualLabor[i];
+      var aLabor = data.actualFcstLabor[i];
       var bLabor = data.budgetLabor[i];
       var variance = aLabor - bLabor;
       var aDL = data.actualDL[i];
@@ -582,32 +752,32 @@
       totActual += aLabor;
       totBudget += bLabor;
 
-      var tr = document.createElement("tr");
-      tr.style.cursor = "pointer";
-      tr.setAttribute("data-month-key", data.monthKeys[i]);
-      tr.addEventListener("click", function () {
-        showDrilldown(this.getAttribute("data-month-key"));
+      var tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      tr.setAttribute('data-month-key', data.monthKeys[i]);
+      tr.addEventListener('click', function () {
+        showDrilldown(this.getAttribute('data-month-key'));
       });
 
-      var tdMonth = document.createElement("td");
-      tdMonth.className = "month-label";
-      tdMonth.textContent = month;
+      var tdMonth = document.createElement('td');
+      tdMonth.className = 'month-label';
+      tdMonth.textContent = month + ' (' + data.monthSources[i] + ')';
       tr.appendChild(tdMonth);
 
       tr.appendChild(makeCurrencyCell(aLabor));
       tr.appendChild(makeCurrencyCell(bLabor));
 
       var tdVar = makeCurrencyCell(variance);
-      if (variance > 0) tdVar.classList.add("negative");
-      else if (variance < 0) tdVar.classList.add("positive");
+      if (variance > 0) tdVar.classList.add('negative');
+      else if (variance < 0) tdVar.classList.add('positive');
       tr.appendChild(tdVar);
 
       tr.appendChild(makePercentCell(aDL));
       tr.appendChild(makePercentCell(bDL));
 
       var tdDLVar = makePercentCell(dlVar, true);
-      if (dlVar > 0.01) tdDLVar.classList.add("negative");
-      else if (dlVar < -0.01) tdDLVar.classList.add("positive");
+      if (dlVar > 0.01) tdDLVar.classList.add('negative');
+      else if (dlVar < -0.01) tdDLVar.classList.add('positive');
       tr.appendChild(tdDLVar);
 
       tbody.appendChild(tr);
@@ -615,26 +785,26 @@
 
     // Totals row
     var totalVariance = totActual - totBudget;
-    var trTotal = document.createElement("tr");
-    trTotal.className = "totals-row";
+    var trTotal = document.createElement('tr');
+    trTotal.className = 'totals-row';
 
-    var tdTotLabel = document.createElement("td");
-    tdTotLabel.className = "month-label";
-    tdTotLabel.textContent = "Total";
+    var tdTotLabel = document.createElement('td');
+    tdTotLabel.className = 'month-label';
+    tdTotLabel.textContent = 'Total';
     trTotal.appendChild(tdTotLabel);
 
     trTotal.appendChild(makeCurrencyCell(totActual));
     trTotal.appendChild(makeCurrencyCell(totBudget));
 
     var tdTotVar = makeCurrencyCell(totalVariance);
-    if (totalVariance > 0) tdTotVar.classList.add("negative");
-    else if (totalVariance < 0) tdTotVar.classList.add("positive");
+    if (totalVariance > 0) tdTotVar.classList.add('negative');
+    else if (totalVariance < 0) tdTotVar.classList.add('positive');
     trTotal.appendChild(tdTotVar);
 
     for (var x = 0; x < 3; x++) {
-      var tdBlank = document.createElement("td");
-      tdBlank.className = "num";
-      tdBlank.textContent = "\u2014";
+      var tdBlank = document.createElement('td');
+      tdBlank.className = 'num';
+      tdBlank.textContent = '\u2014';
       trTotal.appendChild(tdBlank);
     }
 
@@ -642,10 +812,10 @@
   }
 
   function makeCurrencyCell(value) {
-    var td = document.createElement("td");
-    td.className = "num";
-    var prefix = value < 0 ? "-$" : "$";
-    td.textContent = prefix + Math.abs(value).toLocaleString("en-US", {
+    var td = document.createElement('td');
+    td.className = 'num';
+    var prefix = value < 0 ? '-$' : '$';
+    td.textContent = prefix + Math.abs(value).toLocaleString('en-US', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     });
@@ -653,101 +823,142 @@
   }
 
   function makePercentCell(value, showSign) {
-    var td = document.createElement("td");
-    td.className = "num";
-    var prefix = showSign && value > 0 ? "+" : "";
-    td.textContent = prefix + value.toFixed(1) + "%";
+    var td = document.createElement('td');
+    td.className = 'num';
+    var prefix = showSign && value > 0 ? '+' : '';
+    td.textContent = prefix + value.toFixed(1) + '%';
     return td;
   }
 
-  // ─── Drill-down table ─────────────────────────────────────────────────
+  // ─── Drill-down ─────────────────────────────────────────────────────
 
   function showDrilldown(monthKey) {
-    var overlay = document.getElementById("drilldown-overlay");
-    var title = document.getElementById("drilldown-title");
-    var thead = document.getElementById("drilldown-thead");
-    var tbody = document.getElementById("drilldown-tbody");
+    var overlay = document.getElementById('drilldown-overlay');
+    var title = document.getElementById('drilldown-title');
+    var thead = document.getElementById('drilldown-thead');
+    var tbody = document.getElementById('drilldown-tbody');
 
-    var parts = monthKey.split("-");
+    var parts = monthKey.split('-');
     var monthNum = parseInt(parts[1], 10);
-    var label = monthNames[monthNum - 1] + " " + parts[0];
-    title.textContent = label + " \u2014 Labor & Revenue Detail";
+    var label = monthNames[monthNum - 1] + ' ' + parts[0];
+    var isClosed = monthKey <= closingPeriodKey;
+    title.textContent = label + ' \u2014 Labor & Revenue Detail (' + (isClosed ? 'Actual' : 'Forecast') + ')';
 
     var filteredRows = getFilteredRows();
-    var agg = {};
+    var agg = {}; // account → { actual: {labor,revenue}, forecast: {labor,revenue}, budget: {labor,revenue} }
 
     for (var r = 0; r < filteredRows.length; r++) {
       var row = filteredRows[r];
-      var source = row[colIndices.source];
-      if (source !== sourceActual && source !== sourceBudget) continue;
+      var source = row[col.source];
+      if (source !== sourceActual && source !== sourceBudget && source !== sourceForecast) continue;
 
-      var category = row[colIndices.category];
+      var category = row[col.category];
       if (laborCategories.indexOf(category) === -1 && category !== revenueCategory) continue;
 
-      var d = parseDate(row[colIndices.month]);
-      var year = d.getUTCFullYear();
-      if (year !== currentYear) continue;
-
-      var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
-      var key = year + "-" + mm;
+      var d = parseDate(row[col.date]);
+      var key = mkKey(d);
       if (key !== monthKey) continue;
 
-      var amount = parseFloat(row[colIndices.amount]) || 0;
-      var aggKey = source + "|" + category;
-      if (!agg[aggKey]) agg[aggKey] = { source: source, category: category, sum: 0, count: 0 };
-      agg[aggKey].sum += amount;
-      agg[aggKey].count += 1;
+      var amount = normalizeAmount(row[col.amount], source, category);
+      var account = (col.account >= 0 ? row[col.account] : 'Unknown') || 'Unknown';
+
+      if (!agg[account]) {
+        agg[account] = {
+          actual: { labor: 0, revenue: 0 },
+          forecast: { labor: 0, revenue: 0 },
+          budget: { labor: 0, revenue: 0 }
+        };
+      }
+
+      var target;
+      if (source === sourceActual) target = agg[account].actual;
+      else if (source === sourceForecast) target = agg[account].forecast;
+      else target = agg[account].budget;
+
+      if (laborCategories.indexOf(category) !== -1) {
+        target.labor += amount;
+      } else {
+        target.revenue += amount;
+      }
     }
 
-    var aggRows = Object.keys(agg).sort().map(function (k) { return agg[k]; });
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
 
-    thead.innerHTML = "";
-    tbody.innerHTML = "";
-
-    ["Source", "P&L Category", "Amount", "Row Count"].forEach(function (h) {
-      var th = document.createElement("th");
+    ['Parent Account', 'Labor $', 'Budget Labor $', 'Variance $', 'DL %', 'DL % Budget'].forEach(function (h) {
+      var th = document.createElement('th');
       th.textContent = h;
+      if (h !== 'Parent Account') th.style.textAlign = 'right';
       thead.appendChild(th);
     });
 
-    aggRows.forEach(function (r) {
-      var tr = document.createElement("tr");
+    var accounts = Object.keys(agg).sort(function (a, b) {
+      var dataA = agg[a];
+      var dataB = agg[b];
+      var valA = isClosed ? dataA.actual.labor : (dataA.forecast.labor || dataA.actual.labor);
+      var valB = isClosed ? dataB.actual.labor : (dataB.forecast.labor || dataB.actual.labor);
+      return valB - valA;
+    });
 
-      var tdSource = document.createElement("td");
-      tdSource.textContent = r.source === sourceBudget ? "Budget" : "Actual";
-      tr.appendChild(tdSource);
+    accounts.forEach(function (account) {
+      var data = agg[account];
+      var display = isClosed ? data.actual :
+        (data.forecast.labor !== 0 || data.forecast.revenue !== 0) ? data.forecast : data.actual;
+      var b = data.budget;
 
-      var tdCat = document.createElement("td");
-      tdCat.textContent = r.category;
-      tr.appendChild(tdCat);
+      var laborVal = display.labor;
+      var budgetVal = b.labor;
+      var variance = laborVal - budgetVal;
+      var dlPct = display.revenue !== 0 ? (display.labor / display.revenue) * 100 : 0;
+      var dlBudgetPct = b.revenue !== 0 ? (b.labor / b.revenue) * 100 : 0;
 
-      var tdAmount = document.createElement("td");
-      tdAmount.className = "num";
-      tdAmount.textContent = "$" + r.sum.toLocaleString("en-US", {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-      });
-      tr.appendChild(tdAmount);
+      var tr = document.createElement('tr');
 
-      var tdCount = document.createElement("td");
-      tdCount.className = "num";
-      tdCount.textContent = r.count.toLocaleString();
-      tr.appendChild(tdCount);
+      var tdAcct = document.createElement('td');
+      tdAcct.textContent = account;
+      tr.appendChild(tdAcct);
+
+      var tdLabor = document.createElement('td');
+      tdLabor.className = 'num';
+      tdLabor.textContent = fmtCurrency(laborVal);
+      tr.appendChild(tdLabor);
+
+      var tdBudget = document.createElement('td');
+      tdBudget.className = 'num';
+      tdBudget.textContent = fmtCurrency(budgetVal);
+      tr.appendChild(tdBudget);
+
+      var tdVar = document.createElement('td');
+      tdVar.className = 'num';
+      tdVar.textContent = fmtCurrency(variance);
+      if (variance > 0) tdVar.classList.add('negative');
+      else if (variance < 0) tdVar.classList.add('positive');
+      tr.appendChild(tdVar);
+
+      var tdDL = document.createElement('td');
+      tdDL.className = 'num';
+      tdDL.textContent = dlPct.toFixed(1) + '%';
+      tr.appendChild(tdDL);
+
+      var tdDLB = document.createElement('td');
+      tdDLB.className = 'num';
+      tdDLB.textContent = dlBudgetPct.toFixed(1) + '%';
+      tr.appendChild(tdDLB);
 
       tbody.appendChild(tr);
     });
 
-    overlay.classList.remove("hidden");
+    overlay.classList.remove('hidden');
   }
 
   // Close drill-down
-  document.getElementById("drilldown-close").addEventListener("click", function () {
-    document.getElementById("drilldown-overlay").classList.add("hidden");
+  document.getElementById('drilldown-close').addEventListener('click', function () {
+    document.getElementById('drilldown-overlay').classList.add('hidden');
   });
 
-  document.getElementById("drilldown-overlay").addEventListener("click", function (e) {
+  document.getElementById('drilldown-overlay').addEventListener('click', function (e) {
     if (e.target === this) {
-      this.classList.add("hidden");
+      this.classList.add('hidden');
     }
   });
 })();

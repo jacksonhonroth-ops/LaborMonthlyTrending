@@ -1,20 +1,23 @@
 {
    "id": "980d6cca-a620-419f-980c-272d438529b6",
    "name": "MoMLaborTrending",
-   "version": "0.0.1",
+   "version": "0.0.2",
    "datasetsMapping": [
       {
          "dataSetId": "977fd639-75bb-422c-8773-a26488330bca",
          "alias": "dataset",
          "fields": [
-            { "alias": "MONTH", "columnName": "MONTH" },
+            { "alias": "GLPostingDate", "columnName": "GLPostingDate" },
             { "alias": "Amount", "columnName": "Amount" },
             { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
             { "alias": "SOURCE", "columnName": "SOURCE" },
             { "alias": "Region", "columnName": "Region" },
             { "alias": "JobNumber", "columnName": "JobNumber" },
             { "alias": "ParentAccount", "columnName": "Parent Account" },
-            { "alias": "OperationsLead", "columnName": "Operations Lead" }
+            { "alias": "OperationsLead", "columnName": "Operations Lead" },
+            { "alias": "KeepActiveData", "columnName": "KeepActiveData" },
+            { "alias": "MonthlyAlloc", "columnName": "MonthlyAlloc" },
+            { "alias": "mostRecentClosingPeriod", "columnName": "most_recent_closing_period" }
          ]
       }
    ],

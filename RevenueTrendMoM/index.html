@@ -1,30 +1,29 @@
 <html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Labor Monthly Trend</title>
+    <title>Revenue Trend MoM</title>
     <link rel="stylesheet" href="app.css" type="text/css">
     <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700" rel="stylesheet" type="text/css">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
-    <style id="styles" type="text/css"></style>
   </head>
   <body>
     <div id="app">
-      <!-- Header row: title + legend + view toggle -->
+      <!-- Header row -->
       <div id="card-header">
-        <h1 id="card-title">Labor MOM Trending</h1>
+        <h1 id="card-title">Revenue Trend MoM</h1>
         <div id="header-right">
           <div id="legend">
             <span class="legend-item">
-              <span class="legend-bar actual"></span> Actual / Forecast
+              <span class="legend-bar actual"></span> Actual
+            </span>
+            <span class="legend-item">
+              <span class="legend-bar forecast"></span> Forecast
             </span>
             <span class="legend-item">
               <span class="legend-bar budget"></span> Budget
             </span>
             <span class="legend-item">
-              <span class="legend-line actual-line"></span> DL %
-            </span>
-            <span class="legend-item">
-              <span class="legend-line budget-line"></span> DL % Budget
+              <span class="legend-pill">+1.2%</span> MoM
             </span>
           </div>
           <div id="view-toggle">
@@ -45,18 +44,14 @@
           <select id="filter-region"><option value="">All</option></select>
         </div>
         <div class="filter-group">
-          <label for="filter-ops">Ops Lead</label>
-          <select id="filter-ops"><option value="">All</option></select>
+          <label for="filter-account">Parent Account</label>
+          <input id="filter-account" type="text" list="account-list" placeholder="Search..." autocomplete="off">
+          <datalist id="account-list"></datalist>
         </div>
         <div class="filter-group">
           <label for="filter-job">Job Number</label>
           <input id="filter-job" type="text" list="job-list" placeholder="Search..." autocomplete="off">
           <datalist id="job-list"></datalist>
-        </div>
-        <div class="filter-group">
-          <label for="filter-account">Parent Account</label>
-          <input id="filter-account" type="text" list="account-list" placeholder="Search..." autocomplete="off">
-          <datalist id="account-list"></datalist>
         </div>
         <button id="filter-clear" title="Clear all filters">Clear</button>
       </div>
@@ -67,22 +62,19 @@
           <div class="spinner"></div>
           <span id="loader-text">Loading data...</span>
         </div>
-        <canvas id="trendChart"></canvas>
+        <canvas id="revenueChart"></canvas>
       </div>
 
       <!-- Table view (hidden by default) -->
       <div id="table-container" class="hidden">
         <table id="summary-table">
-          <thead><tr id="summary-thead"></tr></thead>
+          <thead id="summary-thead"></thead>
           <tbody id="summary-tbody"></tbody>
         </table>
       </div>
     </div>
 
-    <!-- Debug panel (temporary) -->
-    <div id="debug-panel" style="background:#1e1e2e;color:#cdd6f4;font-family:monospace;font-size:11px;padding:12px 16px;margin:8px 12px;border-radius:6px;max-height:400px;overflow:auto;white-space:pre-wrap;display:none;"></div>
-
-    <!-- Drill-down table overlay -->
+    <!-- Drill-down overlay -->
     <div id="drilldown-overlay" class="hidden">
       <div id="drilldown-modal">
         <div id="drilldown-header">
@@ -101,6 +93,4 @@
     <script src="https://unpkg.com/ryuu.js@4.6.0/dist/domo.js" integrity="sha384-YYsd9wQ+wDlUWhvpfGdptxmNYIqBC+52oJtWgPKJadbs3sSFTY/+ZotPbEHTTRWz" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script src="app.js"></script>
-
-
 </body></html>
