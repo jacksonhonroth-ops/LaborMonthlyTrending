@@ -33,7 +33,7 @@
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
     "WHERE `KeepActiveData` = 1 " +
-    "AND `MonthlyAlloc` = 1 " +
+    "AND `MonthlyAlloc` = 'Keep' " +
     "AND `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET', 'JOB_FORECAST') " +
     "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
     "AND YEAR(`GLPostingDate`) = " + currentYear + " " +
