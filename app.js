@@ -123,6 +123,93 @@
 
   loaderText.textContent = 'Fetching labor data...';
 
+  // ─── Debug ─────────────────────────────────────────────────────────
+
+  function showDebug(cols, rows) {
+    var panel = document.getElementById('debug-panel');
+    if (!panel) return;
+    panel.style.display = 'block';
+
+    var lines = [];
+    lines.push('=== LABOR MOM DEBUG ===');
+    lines.push('currentYear: ' + currentYear);
+    lines.push('columns: ' + JSON.stringify(cols));
+    lines.push('col indices: ' + JSON.stringify(col));
+    lines.push('total rows returned: ' + rows.length);
+    lines.push('');
+
+    // Closing period info
+    var cpRaw = (col.closingPeriod >= 0 && rows.length > 0) ? rows[0][col.closingPeriod] : 'N/A';
+    lines.push('closing period raw value: ' + JSON.stringify(cpRaw) + ' (type: ' + typeof cpRaw + ')');
+    lines.push('closingPeriodKey: ' + closingPeriodKey);
+    lines.push('');
+
+    // Sample first 5 rows
+    lines.push('--- First 5 rows ---');
+    for (var i = 0; i < Math.min(5, rows.length); i++) {
+      lines.push('row[' + i + ']: ' + JSON.stringify(rows[i]));
+    }
+    lines.push('');
+
+    // Count rows by source
+    var sourceCounts = {};
+    var sourceCategories = {};
+    for (var r = 0; r < rows.length; r++) {
+      var src = rows[r][col.source];
+      sourceCounts[src] = (sourceCounts[src] || 0) + 1;
+      var cat = rows[r][col.category];
+      var key = src + ' | ' + cat;
+      sourceCategories[key] = (sourceCategories[key] || 0) + 1;
+    }
+    lines.push('--- Rows by SOURCE ---');
+    Object.keys(sourceCounts).sort().forEach(function (s) {
+      lines.push('  ' + s + ': ' + sourceCounts[s] + ' rows');
+    });
+    lines.push('');
+    lines.push('--- Rows by SOURCE | Category ---');
+    Object.keys(sourceCategories).sort().forEach(function (s) {
+      lines.push('  ' + s + ': ' + sourceCategories[s] + ' rows');
+    });
+    lines.push('');
+
+    // Parse dates and show unique monthKeys per source
+    var monthsBySource = {};
+    var skippedYear = 0;
+    for (var r2 = 0; r2 < rows.length; r2++) {
+      var row = rows[r2];
+      var d = parseDate(row[col.date]);
+      var yr = d.getUTCFullYear();
+      var src2 = row[col.source];
+      var mk = mkKey(d);
+      if (yr !== currentYear) { skippedYear++; continue; }
+      if (!monthsBySource[src2]) monthsBySource[src2] = {};
+      monthsBySource[src2][mk] = (monthsBySource[src2][mk] || 0) + 1;
+    }
+    lines.push('--- MonthKeys per SOURCE (year=' + currentYear + ') ---');
+    lines.push('rows skipped (wrong year): ' + skippedYear);
+    Object.keys(monthsBySource).sort().forEach(function (src) {
+      var mks = monthsBySource[src];
+      lines.push('  ' + src + ':');
+      Object.keys(mks).sort().forEach(function (mk) {
+        lines.push('    ' + mk + ': ' + mks[mk] + ' rows');
+      });
+    });
+    lines.push('');
+
+    // Show first MONTH raw value + parsed date
+    if (rows.length > 0) {
+      var rawDate = rows[0][col.date];
+      var parsed = parseDate(rawDate);
+      lines.push('--- Date parsing check ---');
+      lines.push('raw MONTH value: ' + JSON.stringify(rawDate) + ' (type: ' + typeof rawDate + ')');
+      lines.push('parsed Date: ' + parsed.toISOString());
+      lines.push('mkKey result: ' + mkKey(parsed));
+      lines.push('getUTCFullYear: ' + parsed.getUTCFullYear());
+    }
+
+    panel.textContent = lines.join('\n');
+  }
+
   // ─── Data fetch ─────────────────────────────────────────────────────
 
   domo.post('/sql/v1/dataset', SQL_QUERY, { contentType: 'text/plain' })
@@ -155,6 +242,9 @@
         var now = new Date();
         closingPeriodKey = now.getFullYear() + '-' + ('0' + now.getMonth()).slice(-2);
       }
+
+      // ── DEBUG: dump data structure ──
+      showDebug(cols, rawRows);
 
       populateFilters();
       refreshView();
