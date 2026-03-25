@@ -32,9 +32,9 @@
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
     "WHERE `KeepActiveData` = 1 " +
-    "AND `MonthlyAlloc` = 'Keep' " +
     "AND `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET', 'JOB_FORECAST') " +
     "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
+    "AND YEAR(`MONTH`) = " + currentYear + " " +
     "GROUP BY `MONTH`, `SOURCE`, `P&L Category Name`, `Region`, " +
     "`JobNumber`, `Parent Account`, `Operations Lead`";
 
