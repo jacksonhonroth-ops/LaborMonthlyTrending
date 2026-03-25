@@ -172,18 +172,23 @@
     });
     lines.push('');
 
-    // Parse dates and show unique monthKeys per source
+    // Parse dates, count rows and SUM amounts per source per month per category
     var monthsBySource = {};
+    var amountsBySourceMonthCat = {};
     var skippedYear = 0;
     for (var r2 = 0; r2 < rows.length; r2++) {
       var row = rows[r2];
       var d = parseDate(row[col.date]);
       var yr = d.getUTCFullYear();
       var src2 = row[col.source];
+      var cat2 = row[col.category];
       var mk = mkKey(d);
+      var amt = parseFloat(row[col.amount]) || 0;
       if (yr !== currentYear) { skippedYear++; continue; }
       if (!monthsBySource[src2]) monthsBySource[src2] = {};
       monthsBySource[src2][mk] = (monthsBySource[src2][mk] || 0) + 1;
+      var amtKey = src2 + ' | ' + mk + ' | ' + cat2;
+      amountsBySourceMonthCat[amtKey] = (amountsBySourceMonthCat[amtKey] || 0) + amt;
     }
     lines.push('--- MonthKeys per SOURCE (year=' + currentYear + ') ---');
     lines.push('rows skipped (wrong year): ' + skippedYear);
@@ -193,6 +198,14 @@
       Object.keys(mks).sort().forEach(function (mk) {
         lines.push('    ' + mk + ': ' + mks[mk] + ' rows');
       });
+    });
+    lines.push('');
+
+    // Show summed amounts per source | month | category (Total Labor only, first 3 months)
+    lines.push('--- Summed Amounts: SOURCE | Month | Category ---');
+    Object.keys(amountsBySourceMonthCat).sort().forEach(function (k) {
+      var val = amountsBySourceMonthCat[k];
+      lines.push('  ' + k + ': $' + val.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}));
     });
     lines.push('');
 
