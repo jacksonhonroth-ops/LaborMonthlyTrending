@@ -134,61 +134,29 @@
     loadData();
   }
 
-  // ─── Data Loading — SQL pre-filtered to only needed categories/sources ──
+  // ─── Data Loading via domo.get ────────────────────────────────────────
 
-  // SQL filters by SOURCE only — category filtering done client-side
-  // (budget rows use different P&L category values than actuals)
-  var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `PLCategoryName`, " +
-    "`Region`, `JobNumber`, `ParentAccount`, `OperationsLead`, " +
-    "SUM(`Amount`) as `Amount` " +
-    "FROM dataset " +
-    "WHERE `SOURCE` IN ('ACTUAL', 'JOB_FORECAST', 'OPS_FIN_BUDGET') " +
-    "GROUP BY `MONTH`, `SOURCE`, `PLCategoryName`, `Region`, " +
-    "`JobNumber`, `ParentAccount`, `OperationsLead`";
+  var dataQuery = "/data/v1/" + datasets[0];
 
   function loadData() {
     if (typeof domo === 'undefined') {
       showError('domo.js not loaded');
       return;
     }
-    domo.post('/sql/v1/dataset', SQL_QUERY, { contentType: 'text/plain' })
-      .then(function (resp) {
+    domo.get(dataQuery, { format: "array-of-arrays" })
+      .then(function (data) {
         if (loaderText) loaderText.textContent = "Building chart...";
-        rawData = {
-          columns: resp.columns,
-          rows: resp.rows
-        };
+        rawData = data;
         colIndices = {
-          month: findCol(resp.columns, ["MONTH", "Month"]),
-          amount: findCol(resp.columns, ["Amount", "AMOUNT"]),
-          category: findCol(resp.columns, ["PLCategoryName", "P&L Category Name", "Category"]),
-          source: findCol(resp.columns, ["SOURCE", "Source"]),
-          region: findCol(resp.columns, ["Region", "REGION"]),
-          job: findCol(resp.columns, ["JobNumber", "Job Number"]),
-          account: findCol(resp.columns, ["ParentAccount", "Parent Account"]),
-          opsLead: findCol(resp.columns, ["OperationsLead", "Operations Lead"])
+          month: findCol(data.columns, ["MONTH", "Month", "month"]),
+          amount: findCol(data.columns, ["Amount", "amount", "AMOUNT"]),
+          category: findCol(data.columns, ["PLCategoryName", "P&L Category Name", "P&L_Category_Name"]),
+          source: findCol(data.columns, ["SOURCE", "Source", "source"]),
+          region: findCol(data.columns, ["Region", "region", "REGION"]),
+          job: findCol(data.columns, ["JobNumber", "Job Number", "JOB_NUMBER"]),
+          account: findCol(data.columns, ["ParentAccount", "Parent Account", "PARENT_ACCOUNT"]),
+          opsLead: findCol(data.columns, ["OperationsLead", "Operations Lead", "OpsLead", "OPS_LEAD"])
         };
-
-        console.log('[LaborMOM] Columns:', JSON.stringify(resp.columns));
-        console.log('[LaborMOM] Rows returned:', resp.rows.length);
-        console.log('[LaborMOM] colIndices:', JSON.stringify(colIndices));
-
-        // Debug: log ALL unique SOURCE values from SQL result
-        var allSources = {};
-        var allCats = {};
-        var srcIdx = colIndices.source;
-        var catIdx = colIndices.category;
-        for (var i = 0; i < Math.min(resp.rows.length, 500000); i++) {
-          var sv = resp.rows[i][srcIdx];
-          var cv = resp.rows[i][catIdx];
-          allSources[String(sv)] = (allSources[String(sv)] || 0) + 1;
-          if (i < 100000) allCats[String(cv)] = (allCats[String(cv)] || 0) + 1;
-        }
-        console.log('[LaborMOM] ALL SOURCE values:', JSON.stringify(allSources));
-        console.log('[LaborMOM] Category values (sample):', JSON.stringify(allCats));
-        if (resp.rows.length > 0) {
-          console.log('[LaborMOM] First row:', JSON.stringify(resp.rows[0]));
-        }
 
         populateFilters();
         refreshView();
@@ -196,7 +164,7 @@
       })
       .catch(function (err) {
         var msg = err && err.message ? err.message : JSON.stringify(err);
-        showError('SQL error: ' + msg);
+        showError('Data load error: ' + msg);
       });
   }
 
