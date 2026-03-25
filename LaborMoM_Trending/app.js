@@ -14,6 +14,7 @@
 
   // Source values
   var sourceActual = "ACTUAL";
+  var sourceForecast = "JOB_FORECAST";
   var sourceBudget = "OPS_FIN_BUDGET";
 
   // Current year filter
@@ -141,7 +142,7 @@
     "`Region`, `JobNumber`, `ParentAccount`, `OperationsLead`, " +
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
-    "WHERE `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET') " +
+    "WHERE `SOURCE` IN ('ACTUAL', 'JOB_FORECAST', 'OPS_FIN_BUDGET') " +
     "GROUP BY `MONTH`, `SOURCE`, `PLCategoryName`, `Region`, " +
     "`JobNumber`, `ParentAccount`, `OperationsLead`";
 
@@ -294,6 +295,7 @@
   function aggregateData(rows) {
     var actual = {};
     var forecast = {};
+    var budget = {};
 
     rows.forEach(function (row) {
       var monthRaw = row[colIndices.month];
@@ -301,7 +303,7 @@
       var category = row[colIndices.category];
       var source = row[colIndices.source];
 
-      if (source !== sourceActual && source !== sourceBudget) return;
+      if (source !== sourceActual && source !== sourceForecast && source !== sourceBudget) return;
 
       var d = parseDate(monthRaw);
       var year = d.getUTCFullYear();
@@ -310,7 +312,7 @@
       var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
       var monthKey = year + "-" + mm;
 
-      var target = (source === sourceActual) ? actual : forecast;
+      var target = (source === sourceActual) ? actual : (source === sourceForecast) ? forecast : budget;
       if (!target[monthKey]) {
         target[monthKey] = { labor: 0, revenue: 0 };
       }
@@ -346,6 +348,7 @@
 
       var a = actual[key];
       var f = forecast[key] || { labor: 0, revenue: 0 };
+      var b = budget[key] || { labor: 0, revenue: 0 };
 
       // Use actuals only for closed months (before the current month)
       var useActual = key < curMonthKey && a && (a.labor !== 0 || a.revenue !== 0);
@@ -357,12 +360,12 @@
       monthSources.push(useActual ? "ACT" : "FCST");
 
       actualLabor.push(display.labor);
-      budgetLabor.push(f.labor);
+      budgetLabor.push(b.labor);
 
       var dispRev = display.revenue;
-      var fRev = f.revenue;
+      var bRev = b.revenue;
       actualDL.push(dispRev !== 0 ? parseFloat(((display.labor / dispRev) * 100).toFixed(2)) : 0);
-      budgetDL.push(fRev !== 0 ? parseFloat(((f.labor / fRev) * 100).toFixed(2)) : 0);
+      budgetDL.push(bRev !== 0 ? parseFloat(((b.labor / bRev) * 100).toFixed(2)) : 0);
     });
 
     return {
