@@ -24,7 +24,6 @@
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
     "WHERE `SOURCE` IN ('ACTUAL', 'JOB_FORECAST', 'OPS_FIN_BUDGET') " +
-    "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
     "GROUP BY `MONTH`, `SOURCE`, `P&L Category Name`, `Region`, " +
     "`JobNumber`, `Parent Account`, `Operations Lead`";
 
@@ -258,8 +257,9 @@
       if (laborCategories.indexOf(category) !== -1) {
         target[monthKey].labor += amount;
       } else if (category === revenueCategory) {
-        // Revenue is stored as negative (credit convention) — negate to positive
-        target[monthKey].revenue += amount * -1;
+        // Revenue is stored as credit (negative) in ACTUALS only; forecast/budget already positive
+        var rev = (source === sourceActual) ? amount * -1 : amount;
+        target[monthKey].revenue += rev;
       }
     }
 
