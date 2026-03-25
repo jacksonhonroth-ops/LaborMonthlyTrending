@@ -1,7 +1,7 @@
 // Labor MOM Trending Card
 // Data source: Job_Financials_wo_JoinV2 (977fd639-75bb-422c-8773-a26488330bca)
 // Aggregates Amount by P&L Category Name to derive Labor $ and DL %
-// Compares ACTUAL vs GL_FORECAST, drill-down on click, filter by Region/Job/Account/OpsLead
+// Compares ACTUAL vs GL_FORECAST vs OPS_FIN_BUDGET, drill-down on click, filter by Region/Job/Account/OpsLead
 
 (function () {
   'use strict';
@@ -14,6 +14,7 @@
 
   // Source values
   var sourceActual = "ACTUAL";
+  var sourceForecast = "GL_FORECAST";
   var sourceBudget = "OPS_FIN_BUDGET";
 
   // Current year filter
@@ -294,6 +295,7 @@
   function aggregateData(rows) {
     var actual = {};
     var forecast = {};
+    var budget = {};
 
     rows.forEach(function (row) {
       var monthRaw = row[colIndices.month];
@@ -301,7 +303,7 @@
       var category = row[colIndices.category];
       var source = row[colIndices.source];
 
-      if (source !== sourceActual && source !== sourceBudget) return;
+      if (source !== sourceActual && source !== sourceForecast && source !== sourceBudget) return;
 
       var d = parseDate(monthRaw);
       var year = d.getUTCFullYear();
@@ -310,7 +312,14 @@
       var mm = ("0" + (d.getUTCMonth() + 1)).slice(-2);
       var monthKey = year + "-" + mm;
 
-      var target = (source === sourceActual) ? actual : forecast;
+      var target;
+      if (source === sourceActual) {
+        target = actual;
+      } else if (source === sourceForecast) {
+        target = forecast;
+      } else {
+        target = budget;
+      }
       if (!target[monthKey]) {
         target[monthKey] = { labor: 0, revenue: 0 };
       }
@@ -346,6 +355,7 @@
 
       var a = actual[key];
       var f = forecast[key] || { labor: 0, revenue: 0 };
+      var b = budget[key] || { labor: 0, revenue: 0 };
 
       // Use actuals only for closed months (before the current month)
       var useActual = key < curMonthKey && a && (a.labor !== 0 || a.revenue !== 0);
@@ -357,12 +367,12 @@
       monthSources.push(useActual ? "ACT" : "FCST");
 
       actualLabor.push(display.labor);
-      budgetLabor.push(f.labor);
+      budgetLabor.push(b.labor);
 
       var dispRev = display.revenue;
-      var fRev = f.revenue;
+      var bRev = b.revenue;
       actualDL.push(dispRev !== 0 ? parseFloat(((display.labor / dispRev) * 100).toFixed(2)) : 0);
-      budgetDL.push(fRev !== 0 ? parseFloat(((f.labor / fRev) * 100).toFixed(2)) : 0);
+      budgetDL.push(bRev !== 0 ? parseFloat(((b.labor / bRev) * 100).toFixed(2)) : 0);
     });
 
     return {
