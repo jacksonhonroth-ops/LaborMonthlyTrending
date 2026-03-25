@@ -23,11 +23,10 @@
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
   ];
 
-  // SQL query — pre-aggregate at dataset level.
+  // SQL query — pre-aggregate at dataset level using MONTH field.
   // NOTE: most_recent_closing_period is fetched via MAX() so it does NOT
   // appear in the GROUP BY to avoid splitting budget rows.
-  var SQL_QUERY = "SELECT `GLPostingDate`, `SOURCE`, " +
-    "`P&L Category Name` as `Category`, " +
+  var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `P&L Category Name` as `Category`, " +
     "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
     "MAX(`most_recent_closing_period`) as `most_recent_closing_period`, " +
     "SUM(`Amount`) as `Amount` " +
@@ -36,8 +35,7 @@
     "AND `MonthlyAlloc` = 'Keep' " +
     "AND `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET', 'JOB_FORECAST') " +
     "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
-    "AND YEAR(`GLPostingDate`) = " + currentYear + " " +
-    "GROUP BY `GLPostingDate`, `SOURCE`, `P&L Category Name`, `Region`, " +
+    "GROUP BY `MONTH`, `SOURCE`, `P&L Category Name`, `Region`, " +
     "`JobNumber`, `Parent Account`, `Operations Lead`";
 
   // ─── Utilities ──────────────────────────────────────────────────────
@@ -133,7 +131,7 @@
       var cols = resp.columns;
       rawRows = resp.rows;
       col = {
-        date: findCol(cols, ['GLPostingDate', 'glpostingdate']),
+        date: findCol(cols, ['MONTH', 'Month', 'month']),
         amount: findCol(cols, ['Amount', 'amount', 'AMOUNT']),
         category: findCol(cols, ['Category', 'P&L Category Name', 'PLCategoryName']),
         source: findCol(cols, ['SOURCE', 'Source', 'source']),
@@ -325,6 +323,7 @@
       if (laborCategories.indexOf(category) === -1 && category !== revenueCategory) continue;
 
       var d = parseDate(row[col.date]);
+      if (d.getUTCFullYear() !== currentYear) continue;
       var mk = mkKey(d);
       var amount = normalizeAmount(row[col.amount], source, category);
 
