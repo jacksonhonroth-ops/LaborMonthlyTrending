@@ -16,6 +16,7 @@
             { "alias": "ParentAccount", "columnName": "Parent Account" },
             { "alias": "OperationsLead", "columnName": "Operations Lead" },
             { "alias": "KeepActiveData", "columnName": "KeepActiveData" },
+            { "alias": "MonthlyAlloc", "columnName": "MonthlyAlloc" },
             { "alias": "mostRecentClosingPeriod", "columnName": "most_recent_closing_period" }
          ]
       }

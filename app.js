@@ -34,6 +34,7 @@
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
     "WHERE `KeepActiveData` = 1 " +
+    "AND `MonthlyAlloc` = 1 " +
     "AND `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET', 'JOB_FORECAST') " +
     "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
     "AND YEAR(`GLPostingDate`) = " + currentYear + " " +
@@ -55,6 +56,15 @@
     var s = String(raw);
     if (/^\d{10,}$/.test(s)) return new Date(parseInt(s, 10));
     return new Date(s);
+  }
+
+  // Parse closing period to a monthKey using LOCAL time (not UTC) to avoid
+  // dates like "2026-02-01" shifting back to January due to timezone offset.
+  function closingPeriodToKey(raw) {
+    var d = parseDate(raw);
+    var year = d.getFullYear();
+    var mm = ('0' + (d.getMonth() + 1)).slice(-2);
+    return year + '-' + mm;
   }
 
   function mkKey(d) {
@@ -128,19 +138,18 @@
         closingPeriod: findCol(cols, ['most_recent_closing_period', 'mostRecentClosingPeriod'])
       };
 
-      // Determine closing period from the first row that has it
+      // Determine closing period from the first row that has it.
+      // Use local time parsing so "2026-02-01" → Feb, not Jan (UTC shift).
       for (var r = 0; r < rawRows.length; r++) {
         if (col.closingPeriod >= 0 && rawRows[r][col.closingPeriod]) {
-          var cpDate = parseDate(rawRows[r][col.closingPeriod]);
-          closingPeriodKey = mkKey(cpDate);
+          closingPeriodKey = closingPeriodToKey(rawRows[r][col.closingPeriod]);
           break;
         }
       }
       // Fallback: if no closing period found, use prior month
       if (!closingPeriodKey) {
         var now = new Date();
-        var prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        closingPeriodKey = mkKey(prevMonth);
+        closingPeriodKey = now.getFullYear() + '-' + ('0' + now.getMonth()).slice(-2);
       }
 
       populateFilters();
