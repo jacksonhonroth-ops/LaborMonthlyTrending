@@ -24,18 +24,26 @@
   ];
 
   // SQL query — pre-aggregate at dataset level using MONTH field.
+  // Uses SELECT DISTINCT in a subquery to deduplicate forecast rows
+  // (the forecast ETL keeps multiple uploads without deduplication,
+  // so identical rows appear 2+ times and SUM doubles the amounts).
   // NOTE: most_recent_closing_period is fetched via MAX() so it does NOT
   // appear in the GROUP BY to avoid splitting budget rows.
-  var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `P&L Category Name` as `Category`, " +
+  var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `Category`, " +
     "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
     "MAX(`most_recent_closing_period`) as `most_recent_closing_period`, " +
     "SUM(`Amount`) as `Amount` " +
-    "FROM dataset " +
-    "WHERE `KeepActiveData` = 1 " +
-    "AND `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET', 'JOB_FORECAST') " +
-    "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
-    "AND YEAR(`MONTH`) = " + currentYear + " " +
-    "GROUP BY `MONTH`, `SOURCE`, `P&L Category Name`, `Region`, " +
+    "FROM (" +
+    "  SELECT DISTINCT `MONTH`, `SOURCE`, `P&L Category Name` as `Category`, " +
+    "  `Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
+    "  `most_recent_closing_period`, `Amount` " +
+    "  FROM dataset " +
+    "  WHERE `KeepActiveData` = 1 " +
+    "  AND `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET', 'JOB_FORECAST') " +
+    "  AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
+    "  AND YEAR(`MONTH`) = " + currentYear +
+    ") deduped " +
+    "GROUP BY `MONTH`, `SOURCE`, `Category`, `Region`, " +
     "`JobNumber`, `Parent Account`, `Operations Lead`";
 
   // ─── Utilities ──────────────────────────────────────────────────────
