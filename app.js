@@ -12,10 +12,10 @@
   var laborCategories = ["Total Labor"];
   var revenueCategory = "Service Revenue";
 
-  // Source values
+  // Source values (Column field in dataset)
   var sourceActual = "ACTUAL";
   var sourceForecast = "GL_FORECAST";
-  var sourceBudget = "OPS_FIN_BUDGET";
+  var sourceBudget = "GL_BUDGET";
 
   // Current year filter
   var currentYear = 2026;
@@ -136,14 +136,14 @@
 
   // ─── Data Loading — SQL pre-filtered to only needed categories/sources ──
 
-  // SQL filters by SOURCE only — category filtering done client-side
+  // SQL filters by Column only — category filtering done client-side
   // (budget rows use different P&L category values than actuals)
-  var SQL_QUERY = "SELECT `MONTH`, `SOURCE`, `PLCategoryName`, " +
+  var SQL_QUERY = "SELECT `MONTH`, `Column` as `SOURCE`, `PLCategoryName`, " +
     "`Region`, `JobNumber`, `ParentAccount`, `OperationsLead`, " +
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
-    "WHERE `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET') " +
-    "GROUP BY `MONTH`, `SOURCE`, `PLCategoryName`, `Region`, " +
+    "WHERE `Column` IN ('ACTUAL', 'GL_FORECAST', 'GL_BUDGET') " +
+    "GROUP BY `MONTH`, `Column`, `PLCategoryName`, `Region`, " +
     "`JobNumber`, `ParentAccount`, `OperationsLead`";
 
   function loadData() {
@@ -162,7 +162,7 @@
           month: findCol(resp.columns, ["MONTH", "Month"]),
           amount: findCol(resp.columns, ["Amount", "AMOUNT"]),
           category: findCol(resp.columns, ["PLCategoryName", "P&L Category Name", "Category"]),
-          source: findCol(resp.columns, ["SOURCE", "Source"]),
+          source: findCol(resp.columns, ["SOURCE", "Source", "Column"]),
           region: findCol(resp.columns, ["Region", "REGION"]),
           job: findCol(resp.columns, ["JobNumber", "Job Number"]),
           account: findCol(resp.columns, ["ParentAccount", "Parent Account"]),
@@ -734,7 +734,7 @@
 
     filteredRows.forEach(function (row) {
       var source = row[colIndices.source];
-      if (source !== sourceActual && source !== sourceBudget) return;
+      if (source !== sourceActual && source !== sourceForecast && source !== sourceBudget) return;
 
       var category = row[colIndices.category];
       if (laborCategories.indexOf(category) === -1 && category !== revenueCategory) return;
@@ -769,7 +769,7 @@
       var tr = document.createElement("tr");
 
       var tdSource = document.createElement("td");
-      tdSource.textContent = r.source === sourceBudget ? "Budget" : "Actual";
+      tdSource.textContent = r.source === sourceBudget ? "Budget" : (r.source === sourceForecast ? "Forecast" : "Actual");
       tr.appendChild(tdSource);
 
       var tdCat = document.createElement("td");

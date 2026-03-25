@@ -10,7 +10,7 @@
             { "alias": "MONTH", "columnName": "MONTH" },
             { "alias": "Amount", "columnName": "Amount" },
             { "alias": "PLCategoryName", "columnName": "P&L Category Name" },
-            { "alias": "SOURCE", "columnName": "SOURCE" },
+            { "alias": "Column", "columnName": "Column" },
             { "alias": "Region", "columnName": "Region" },
             { "alias": "JobNumber", "columnName": "JobNumber" },
             { "alias": "ParentAccount", "columnName": "Parent Account" },
