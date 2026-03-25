@@ -14,7 +14,7 @@
 
   // Source values
   var sourceActual = "ACTUAL";
-  var sourceForecast = "GL_FORECAST";
+  var sourceForecast = "JOB_FORECAST";
   var sourceBudget = "OPS_FIN_BUDGET";
 
   // Current year filter
@@ -142,7 +142,7 @@
     "`Region`, `JobNumber`, `ParentAccount`, `OperationsLead`, " +
     "SUM(`Amount`) as `Amount` " +
     "FROM dataset " +
-    "WHERE `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET') " +
+    "WHERE `SOURCE` IN ('ACTUAL', 'JOB_FORECAST', 'OPS_FIN_BUDGET') " +
     "GROUP BY `MONTH`, `SOURCE`, `PLCategoryName`, `Region`, " +
     "`JobNumber`, `ParentAccount`, `OperationsLead`";
 
