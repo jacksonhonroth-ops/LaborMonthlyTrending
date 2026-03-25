@@ -132,92 +132,63 @@
 
     var lines = [];
     lines.push('=== LABOR MOM DEBUG ===');
-    lines.push('currentYear: ' + currentYear);
-    lines.push('columns: ' + JSON.stringify(cols));
-    lines.push('col indices: ' + JSON.stringify(col));
-    lines.push('total rows returned: ' + rows.length);
+    lines.push('rows: ' + rows.length + ' | closingPeriod: ' + closingPeriodKey + ' | year: ' + currentYear);
     lines.push('');
 
-    // Closing period info
-    var cpRaw = (col.closingPeriod >= 0 && rows.length > 0) ? rows[0][col.closingPeriod] : 'N/A';
-    lines.push('closing period raw value: ' + JSON.stringify(cpRaw) + ' (type: ' + typeof cpRaw + ')');
-    lines.push('closingPeriodKey: ' + closingPeriodKey);
-    lines.push('');
-
-    // Sample first 5 rows
-    lines.push('--- First 5 rows ---');
-    for (var i = 0; i < Math.min(5, rows.length); i++) {
-      lines.push('row[' + i + ']: ' + JSON.stringify(rows[i]));
-    }
-    lines.push('');
-
-    // Count rows by source
-    var sourceCounts = {};
-    var sourceCategories = {};
+    // SUM Total Labor amounts per source per month (the most critical view)
+    var laborBySourceMonth = {};
+    var revBySourceMonth = {};
+    var rowsBySourceMonth = {};
     for (var r = 0; r < rows.length; r++) {
-      var src = rows[r][col.source];
-      sourceCounts[src] = (sourceCounts[src] || 0) + 1;
-      var cat = rows[r][col.category];
-      var key = src + ' | ' + cat;
-      sourceCategories[key] = (sourceCategories[key] || 0) + 1;
-    }
-    lines.push('--- Rows by SOURCE ---');
-    Object.keys(sourceCounts).sort().forEach(function (s) {
-      lines.push('  ' + s + ': ' + sourceCounts[s] + ' rows');
-    });
-    lines.push('');
-    lines.push('--- Rows by SOURCE | Category ---');
-    Object.keys(sourceCategories).sort().forEach(function (s) {
-      lines.push('  ' + s + ': ' + sourceCategories[s] + ' rows');
-    });
-    lines.push('');
-
-    // Parse dates, count rows and SUM amounts per source per month per category
-    var monthsBySource = {};
-    var amountsBySourceMonthCat = {};
-    var skippedYear = 0;
-    for (var r2 = 0; r2 < rows.length; r2++) {
-      var row = rows[r2];
+      var row = rows[r];
       var d = parseDate(row[col.date]);
-      var yr = d.getUTCFullYear();
-      var src2 = row[col.source];
-      var cat2 = row[col.category];
+      if (d.getUTCFullYear() !== currentYear) continue;
+      var src = row[col.source];
+      var cat = row[col.category];
       var mk = mkKey(d);
       var amt = parseFloat(row[col.amount]) || 0;
-      if (yr !== currentYear) { skippedYear++; continue; }
-      if (!monthsBySource[src2]) monthsBySource[src2] = {};
-      monthsBySource[src2][mk] = (monthsBySource[src2][mk] || 0) + 1;
-      var amtKey = src2 + ' | ' + mk + ' | ' + cat2;
-      amountsBySourceMonthCat[amtKey] = (amountsBySourceMonthCat[amtKey] || 0) + amt;
+      var k = src + ' | ' + mk;
+      if (!rowsBySourceMonth[k]) rowsBySourceMonth[k] = 0;
+      rowsBySourceMonth[k]++;
+      if (cat === 'Total Labor') {
+        laborBySourceMonth[k] = (laborBySourceMonth[k] || 0) + amt;
+      } else {
+        revBySourceMonth[k] = (revBySourceMonth[k] || 0) + amt;
+      }
     }
-    lines.push('--- MonthKeys per SOURCE (year=' + currentYear + ') ---');
-    lines.push('rows skipped (wrong year): ' + skippedYear);
-    Object.keys(monthsBySource).sort().forEach(function (src) {
-      var mks = monthsBySource[src];
-      lines.push('  ' + src + ':');
-      Object.keys(mks).sort().forEach(function (mk) {
-        lines.push('    ' + mk + ': ' + mks[mk] + ' rows');
-      });
+
+    lines.push('--- TOTAL LABOR $ by Source | Month ---');
+    Object.keys(laborBySourceMonth).sort().forEach(function (k) {
+      var val = laborBySourceMonth[k];
+      var cnt = rowsBySourceMonth[k] || 0;
+      lines.push('  ' + k + ': $' + Math.round(val).toLocaleString() + ' (' + cnt + ' rows)');
     });
     lines.push('');
 
-    // Show summed amounts per source | month | category (Total Labor only, first 3 months)
-    lines.push('--- Summed Amounts: SOURCE | Month | Category ---');
-    Object.keys(amountsBySourceMonthCat).sort().forEach(function (k) {
-      var val = amountsBySourceMonthCat[k];
-      lines.push('  ' + k + ': $' + val.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}));
+    lines.push('--- SERVICE REVENUE $ by Source | Month ---');
+    Object.keys(revBySourceMonth).sort().forEach(function (k) {
+      var val = revBySourceMonth[k];
+      lines.push('  ' + k + ': $' + Math.round(val).toLocaleString());
     });
     lines.push('');
 
-    // Show first MONTH raw value + parsed date
+    // Row counts by source
+    lines.push('--- Row counts ---');
+    var srcCounts = {};
+    for (var r2 = 0; r2 < rows.length; r2++) {
+      var s = rows[r2][col.source];
+      srcCounts[s] = (srcCounts[s] || 0) + 1;
+    }
+    Object.keys(srcCounts).sort().forEach(function (s) {
+      lines.push('  ' + s + ': ' + srcCounts[s]);
+    });
+
+    // Date parsing check
     if (rows.length > 0) {
       var rawDate = rows[0][col.date];
       var parsed = parseDate(rawDate);
-      lines.push('--- Date parsing check ---');
-      lines.push('raw MONTH value: ' + JSON.stringify(rawDate) + ' (type: ' + typeof rawDate + ')');
-      lines.push('parsed Date: ' + parsed.toISOString());
-      lines.push('mkKey result: ' + mkKey(parsed));
-      lines.push('getUTCFullYear: ' + parsed.getUTCFullYear());
+      lines.push('');
+      lines.push('date check: raw=' + rawDate + ' → mkKey=' + mkKey(parsed));
     }
 
     panel.textContent = lines.join('\n');
