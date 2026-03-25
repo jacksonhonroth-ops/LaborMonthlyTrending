@@ -23,10 +23,12 @@
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
   ];
 
-  // SQL query — pre-aggregate at dataset level
+  // SQL query — pre-aggregate at dataset level, grouped by MONTH to avoid
+  // double-counting budget/forecast rows that repeat across GLPostingDate.
   // NOTE: most_recent_closing_period is fetched via MAX() so it does NOT
-  // appear in the GROUP BY to avoid splitting budget rows and double-counting.
-  var SQL_QUERY = "SELECT `GLPostingDate`, `SOURCE`, `P&L Category Name` as `Category`, " +
+  // appear in the GROUP BY to avoid splitting budget rows.
+  var SQL_QUERY = "SELECT MONTH(`GLPostingDate`) as `PostingMonth`, `SOURCE`, " +
+    "`P&L Category Name` as `Category`, " +
     "`Region`, `JobNumber`, `Parent Account`, `Operations Lead`, " +
     "MAX(`most_recent_closing_period`) as `most_recent_closing_period`, " +
     "SUM(`Amount`) as `Amount` " +
@@ -35,7 +37,7 @@
     "AND `SOURCE` IN ('ACTUAL', 'OPS_FIN_BUDGET', 'JOB_FORECAST') " +
     "AND `P&L Category Name` IN ('Total Labor', 'Service Revenue') " +
     "AND YEAR(`GLPostingDate`) = " + currentYear + " " +
-    "GROUP BY `GLPostingDate`, `SOURCE`, `P&L Category Name`, `Region`, " +
+    "GROUP BY MONTH(`GLPostingDate`), `SOURCE`, `P&L Category Name`, `Region`, " +
     "`JobNumber`, `Parent Account`, `Operations Lead`";
 
   // ─── Utilities ──────────────────────────────────────────────────────
@@ -115,7 +117,7 @@
       var cols = resp.columns;
       rawRows = resp.rows;
       col = {
-        date: findCol(cols, ['GLPostingDate', 'glpostingdate']),
+        month: findCol(cols, ['PostingMonth', 'postingmonth', 'POSTINGMONTH']),
         amount: findCol(cols, ['Amount', 'amount', 'AMOUNT']),
         category: findCol(cols, ['Category', 'P&L Category Name', 'PLCategoryName']),
         source: findCol(cols, ['SOURCE', 'Source', 'source']),
@@ -307,8 +309,9 @@
       if (source !== sourceActual && source !== sourceBudget && source !== sourceForecast) continue;
       if (laborCategories.indexOf(category) === -1 && category !== revenueCategory) continue;
 
-      var d = parseDate(row[col.date]);
-      var mk = mkKey(d);
+      var monthNum = parseInt(row[col.month], 10);
+      if (!monthNum || monthNum < 1 || monthNum > 12) continue;
+      var mk = currentYear + '-' + ('0' + monthNum).slice(-2);
       var amount = normalizeAmount(row[col.amount], source, category);
 
       var target;
@@ -757,8 +760,9 @@
       var category = row[col.category];
       if (laborCategories.indexOf(category) === -1 && category !== revenueCategory) continue;
 
-      var d = parseDate(row[col.date]);
-      var key = mkKey(d);
+      var mn = parseInt(row[col.month], 10);
+      if (!mn || mn < 1 || mn > 12) continue;
+      var key = currentYear + '-' + ('0' + mn).slice(-2);
       if (key !== monthKey) continue;
 
       var amount = normalizeAmount(row[col.amount], source, category);
