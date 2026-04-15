@@ -6,13 +6,25 @@
 (function () {
   'use strict';
 
-  var SQL_QUERY = "SELECT `MONTH`, `Region`, `Column` as `SOURCE`, " +
+  /* Addbacks are summed via Metrics only (ignoring P&L Category Name) because
+     the ETL splits sub-category rows where P&L Category Name != 'Total Addbacks',
+     which would fail the Metrics = P&L Category Name constraint used for the
+     other (single-level) categories. */
+  var SQL_QUERY =
+    "SELECT `MONTH`, `Region`, `Column` as `SOURCE`, " +
+    "'Total Addbacks' as `Metrics`, SUM(`AMOUNT`) as `AMOUNT` " +
+    "FROM dataset " +
+    "WHERE `Column` IN ('ACTUAL', 'GL_FORECAST', 'GL_BUDGET') " +
+    "AND `Metrics` = 'Total Addbacks' " +
+    "GROUP BY `MONTH`, `Region`, `Column` " +
+    "UNION ALL " +
+    "SELECT `MONTH`, `Region`, `Column` as `SOURCE`, " +
     "`Metrics`, SUM(`AMOUNT`) as `AMOUNT` " +
     "FROM dataset " +
     "WHERE `Column` IN ('ACTUAL', 'GL_FORECAST', 'GL_BUDGET') " +
     "AND `Metrics` IN ('Service Revenue','Total Labor','Contract Expenses'," +
     "'Supplies & Materials','Field Overhead','HQ Overhead','Sales Overhead'," +
-    "'Benefits & Taxes','Total Addbacks') " +
+    "'Benefits & Taxes') " +
     "AND `Metrics` = `P&L Category Name` " +
     "GROUP BY `MONTH`, `Region`, `Column`, `Metrics`";
 
