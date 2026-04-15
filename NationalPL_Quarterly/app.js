@@ -16,7 +16,7 @@
     "'Total Addbacks' as `Metrics`, SUM(`AMOUNT`) as `AMOUNT` " +
     "FROM dataset " +
     "WHERE `Column` IN ('ACTUAL', 'GL_FORECAST', 'GL_BUDGET') " +
-    "AND `Metrics` = 'Total Addbacks' " +
+    "AND `Metrics` = 'Addbacks' " +
     "GROUP BY `MONTH`, `Region`, `Column` " +
     "UNION ALL " +
     "SELECT `MONTH`, `Region`, `Column` as `SOURCE`, " +
